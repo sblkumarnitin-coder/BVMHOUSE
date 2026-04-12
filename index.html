@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -318,6 +319,67 @@
     top: 0; left: 0; right: 0;
     height: 3px;
     background: linear-gradient(90deg, var(--gold), transparent);
+  }
+  .chairman-preview-card {
+    padding: 0;
+    overflow: hidden;
+    min-height: 430px;
+    display: flex;
+    flex-direction: column;
+  }
+  .chairman-preview-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    cursor: pointer;
+  }
+  .chairman-preview-head {
+    padding: 18px 20px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .chairman-preview-head strong {
+    font-family: 'Cinzel', serif;
+    font-size: 16px;
+    color: var(--gold);
+  }
+  .chairman-preview-head span {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .chairman-preview-frame {
+    flex: 1;
+    min-height: 340px;
+    border: none;
+    width: 100%;
+    background: #fff;
+    pointer-events: none;
+    object-fit: cover;
+    object-position: center top;
+    display: block;
+  }
+  .chairman-preview-foot {
+    padding: 12px 20px 18px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .chairman-message-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 20px;
+    box-shadow: var(--shadow-soft);
+  }
+  .chairman-message-frame {
+    width: 100%;
+    min-height: 78vh;
+    border: none;
+    border-radius: 16px;
+    background: #fff;
   }
   .stat-num {
     font-family: 'Cinzel', serif;
@@ -731,45 +793,59 @@
     pointer-events:none;
   }
   .result-reveal-title { font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;font-weight:700; }
-  .result-reveal-stage { min-height:540px;display:flex;flex-direction:column;justify-content:flex-start;gap:18px;position:relative;z-index:1; }
+  .result-reveal-stage { min-height:620px;display:flex;flex-direction:column;justify-content:flex-start;gap:18px;position:relative;z-index:1;overflow:hidden; }
   .result-host {
     display:flex;
-    align-items:center;
-    gap:16px;
-    width:min(100%, 430px);
+    align-items:flex-end;
+    gap:18px;
+    width:176px;
+    max-width:176px;
     margin:0;
-    padding:14px 18px;
-    border:1px solid rgba(255,255,255,0.12);
-    border-radius:20px;
-    background:linear-gradient(135deg, rgba(255,255,255,0.09), rgba(255,255,255,0.03));
-    box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);
-    position:relative;
-    overflow:hidden;
     position:absolute;
-    top:10px;
-    right:8px;
+    top:18px;
+    right:18px;
     z-index:3;
-    animation:hostPopupIn 0.7s ease, hostWander 5.2s ease-in-out infinite 0.8s;
-    backdrop-filter:blur(10px);
+    animation:hostPopupIn 0.7s ease;
   }
   .result-host::before {
     content:'';
     position:absolute;
-    left:-20px;
-    bottom:-28px;
-    width:180px;
-    height:120px;
-    background:radial-gradient(circle at 50% 50%, rgba(96,165,250,0.22), transparent 70%);
-    filter:blur(12px);
+    left:8px;
+    right:8px;
+    bottom:-14px;
+    height:42px;
+    background:radial-gradient(circle at 50% 50%, rgba(240,180,41,0.3), transparent 72%);
+    filter:blur(16px);
     pointer-events:none;
   }
   .result-host-figure {
-    width:132px;
-    height:132px;
+    width:176px;
+    height:176px;
     position:relative;
     flex-shrink:0;
-    margin-left:-8px;
-    animation:hostFloat 2.2s ease-in-out infinite;
+    animation:hostFloat 2.8s ease-in-out infinite;
+  }
+  .result-host-figure::before {
+    content:'';
+    position:absolute;
+    inset:12% 12% 8%;
+    border-radius:50%;
+    background:radial-gradient(circle at 50% 40%, rgba(59,130,246,0.34), transparent 62%);
+    filter:blur(18px);
+    z-index:0;
+  }
+  .result-host-figure::after {
+    content:'';
+    position:absolute;
+    left:50%;
+    bottom:8px;
+    width:128px;
+    height:44px;
+    transform:translateX(-50%);
+    border-radius:999px;
+    background:radial-gradient(circle at center, rgba(56,189,248,0.34), rgba(56,189,248,0.08) 58%, transparent 78%);
+    filter:blur(10px);
+    z-index:0;
   }
   .result-host-figure svg {
     width:100%;
@@ -783,18 +859,48 @@
     object-fit:contain;
     display:block;
     filter:drop-shadow(0 12px 26px rgba(56,189,248,0.24));
+    position:relative;
+    z-index:1;
   }
-  .result-host-copy { text-align:left; flex:1; }
-  .result-host-label { font-size:11px; letter-spacing:1.4px; text-transform:uppercase; color:var(--muted); font-weight:700; margin-bottom:4px; }
-  .result-host-line { font-size:16px; line-height:1.55; color:var(--text); }
+  .result-host-copy { display:none; }
+  .result-host-label { font-size:11px; letter-spacing:1.4px; text-transform:uppercase; color:var(--gold); font-weight:700; margin-bottom:6px; }
+  .result-host-line { font-size:17px; line-height:1.62; color:var(--text); min-height:110px; }
+  .result-host-wave {
+    display:flex;
+    align-items:flex-end;
+    gap:5px;
+    margin-top:10px;
+    height:22px;
+  }
+  .result-host-wave span {
+    width:5px;
+    height:8px;
+    border-radius:999px;
+    background:linear-gradient(180deg, #f0b429, #60a5fa);
+    opacity:0.35;
+    transform-origin:bottom center;
+  }
+  .result-host[data-speaking="true"] .result-host-wave span {
+    opacity:1;
+    animation:hostTalking 0.8s ease-in-out infinite;
+  }
+  .result-host[data-speaking="true"] .result-host-figure {
+    animation:hostFloat 1.3s ease-in-out infinite;
+  }
+  .result-host[data-speaking="true"] .result-host-copy {
+    box-shadow:0 24px 46px rgba(0,0,0,0.26), 0 0 0 1px rgba(240,180,41,0.14), 0 0 34px rgba(240,180,41,0.12), inset 0 1px 0 rgba(255,255,255,0.08);
+  }
+  .result-host-wave span:nth-child(2) { animation-delay:0.12s; }
+  .result-host-wave span:nth-child(3) { animation-delay:0.24s; }
+  .result-host-wave span:nth-child(4) { animation-delay:0.36s; }
   .result-reveal-prompt {
-    min-height:210px;
+    min-height:250px;
     display:flex;
     flex-direction:column;
     align-items:center;
     justify-content:center;
     gap:14px;
-    padding:150px 12px 6px;
+    padding:220px 24px 8px 24px;
   }
   .result-reveal-line { font-family:'Cinzel',serif;font-size:22px;color:var(--text);animation:revealRise 0.45s ease; }
   .result-reveal-loading { font-size:28px;color:var(--gold);letter-spacing:1px;animation:pulseGlow 1s ease-in-out infinite; }
@@ -842,6 +948,26 @@
   }
   .result-hidden-details { display:none; }
   .result-hidden-details.visible { display:block; animation:revealRise 0.55s ease; }
+  @keyframes hostTalking {
+    0%, 100% { height:8px; transform:scaleY(1); }
+    50% { height:20px; transform:scaleY(1.1); }
+  }
+  @media (max-width: 900px) {
+    .result-host {
+      width:120px;
+      max-width:120px;
+      top:10px;
+      right:10px;
+    }
+    .result-host-figure {
+      width:120px;
+      height:120px;
+    }
+    .result-reveal-prompt {
+      min-height:180px;
+      padding:150px 14px 18px;
+    }
+  }
   .result-confetti-layer { position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:5200; }
   .result-confetti {
     position:absolute;
@@ -1011,9 +1137,15 @@
         <p>Inter-house competition management for Bal Vidya Mandir, Sambhal</p>
       </div>
       <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-num" id="statStudents">0</div>
-          <div class="stat-label">Active Students</div>
+        <div class="stat-card chairman-preview-card" onclick="showChairmanMessagePage()">
+          <div class="chairman-preview-shell">
+            <div class="chairman-preview-head">
+              <strong>Chairman's Message</strong>
+              <span>Tap To Open</span>
+            </div>
+            <img class="chairman-preview-frame" alt="Chairman message thumbnail" src="file:///C:/Users/sblku/OneDrive/Pictures/Screenshots/Screenshot%202026-04-12%20135039.png">
+            <div class="chairman-preview-foot">Open the full Chairman's Message page.</div>
+          </div>
         </div>
         <div class="stat-card">
           <div class="stat-num" id="statEvents">0</div>
@@ -1451,6 +1583,10 @@ function showPage(id, title) {
   if(el) el.classList.add('active');
   if(title) document.getElementById('topbarTitle').textContent = title;
   document.getElementById('sidebar').classList.remove('open');
+  window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+  if(el) el.scrollTop = 0;
   
   if(id === 'studentSettings' || id === 'eventsSettings' || id === 'addResultAdmin') {
     if(!isAdminLoggedIn) {
@@ -1465,6 +1601,21 @@ function showPage(id, title) {
     }
   }
   if(id === 'findEvent') populateFindEventDropdown();
+}
+
+function showChairmanMessagePage() {
+  const dynPage = document.getElementById('page-dynamic');
+  if(!dynPage) return;
+  dynPage.innerHTML = `
+    <div class="page-header">
+      <h1>Chairman's Message</h1>
+      <p>Full message view</p>
+    </div>
+    <div class="chairman-message-panel">
+      <iframe class="chairman-message-frame" title="Chairman's Message" src="file:///C:/Users/sblku/Downloads/Chairman%27s%20Message.pdf#toolbar=0&navpanes=0&page=1&view=FitH"></iframe>
+    </div>
+    <button class="btn btn-secondary" style="margin-top:18px" onclick="showPage('dashboard','Dashboard')">← Back</button>`;
+  showPage('dynamic', "Chairman's Message");
 }
 
 function toggleNav(id, el) {
@@ -1615,7 +1766,8 @@ async function loadStudents() {
     const { data, error } = await db.from('students').select('*').order('student_name', { ascending: true });
     if(error) throw error;
     allStudents = data || [];
-    document.getElementById('statStudents').textContent = allStudents.length;
+    const statStudents = document.getElementById('statStudents');
+    if(statStudents) statStudents.textContent = allStudents.length;
     document.getElementById('studentCount').textContent = allStudents.length;
     renderStudentList();
     if(document.getElementById('participantRegistrationSection').style.display === 'block') {
@@ -3643,14 +3795,40 @@ function placeDisplayLabel(placeKey) {
 
 function renderRevealPrompt(container, placeKey) {
   if(!container) return;
+  if(placeKey === 'intro') {
+    container.innerHTML = `
+      <div class="result-reveal-line">Live result announcement is starting</div>
+      <div class="result-reveal-loading">Please welcome Zinny...</div>`;
+    return;
+  }
   container.innerHTML = `
-    <div class="result-reveal-line">${placeDisplayLabel(placeKey)} is scored by</div>
-    <div class="result-reveal-loading">Getting.....</div>`;
+    <div class="result-reveal-line">Now announcing ${placeDisplayLabel(placeKey).toLowerCase()}</div>
+    <div class="result-reveal-loading">Please wait...</div>`;
 }
 
 function setResultHostText(text) {
   const el = document.getElementById('resultHostLine');
   if(el) el.textContent = text;
+}
+
+function setResultHostMood(mood) {
+  const host = document.getElementById('singleEventResultHost');
+  if(!host) return;
+  host.dataset.mood = mood || 'intro';
+}
+
+let resultSpeechToken = 0;
+function setResultHostSpeaking(active) {
+  const host = document.getElementById('singleEventResultHost');
+  if(host) host.dataset.speaking = active ? 'true' : 'false';
+}
+
+function normalizeAnnouncementText(text) {
+  return String(text || '')
+    .replace(/\s+/g, ' ')
+    .replace(/\bi am\b/gi, 'I am')
+    .replace(/\bai ageant\b/gi, 'AI agent')
+    .trim();
 }
 
 function revealCardClass(placeKey) {
@@ -3752,18 +3930,57 @@ function getIndianAnnouncementVoice() {
 }
 
 function speakResultAnnouncement(text) {
-  if(!window.speechSynthesis) return;
-  try {
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
-    const voice = getIndianAnnouncementVoice();
-    if(voice) utter.voice = voice;
-    utter.lang = voice?.lang || 'en-IN';
-    utter.rate = voice?.lang === 'hi-IN' ? 0.9 : 0.92;
-    utter.pitch = 0.98;
-    utter.volume = 1;
-    window.speechSynthesis.speak(utter);
-  } catch(e) {}
+  return new Promise(resolve => {
+    if(!window.speechSynthesis) {
+      resolve();
+      return;
+    }
+    try {
+      const cleanText = normalizeAnnouncementText(text);
+      const token = ++resultSpeechToken;
+      let settled = false;
+      const finish = () => {
+        if(settled) return;
+        settled = true;
+        if(token === resultSpeechToken) setResultHostSpeaking(false);
+        resolve();
+      };
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(cleanText);
+      const voice = getIndianAnnouncementVoice();
+      if(voice) utter.voice = voice;
+      utter.lang = voice?.lang || 'en-IN';
+      utter.rate = voice?.lang === 'hi-IN' ? 0.83 : 0.84;
+      utter.pitch = 0.96;
+      utter.volume = 1;
+      utter.onstart = () => {
+        if(token === resultSpeechToken) setResultHostSpeaking(true);
+      };
+      utter.onend = finish;
+      utter.onerror = finish;
+      window.speechSynthesis.speak(utter);
+      const fallbackMs = Math.max(4000, cleanText.length * 140);
+      setTimeout(finish, fallbackMs);
+    } catch(e) {
+      setResultHostSpeaking(false);
+      resolve();
+    }
+  });
+}
+
+function cleanEventAnnouncementName(eventLabel) {
+  return String(eventLabel || 'this inter house event')
+    .replace(/\s+/g, ' ')
+    .replace(/[|]/g, ' ')
+    .replace(/[()]/g, ' ')
+    .replace(/\s+[-:]\s+/g, ' ')
+    .trim();
+}
+
+function cleanHouseAnnouncementName(houseName) {
+  return String(houseName || 'the house')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 async function runSingleEventReveal(result, noteData, eventLabel) {
@@ -3775,36 +3992,41 @@ async function runSingleEventReveal(result, noteData, eventLabel) {
 
   const pts = noteData?.points || PLACE_POINTS;
   const sequence = ['third_place', 'second_place', 'first_place'];
+  const spokenEventName = cleanEventAnnouncementName(eventLabel);
   list.innerHTML = '';
-  const intro = `Hi, i am the AI Agent of our House coordinater. Now i am going to announce the result of ${eventLabel}.`;
+  setResultHostMood('intro');
+  const intro = `Hi, I am Zinny, the AI agent of the House Coordinator of Bal Vidya Mandir. Now I am going to announce the result of the inter house event. Event name, ${spokenEventName}.`;
   setResultHostText(intro);
-  speakResultAnnouncement(intro);
-  await waitMs(3800);
+  renderRevealPrompt(prompt, 'intro');
+  await speakResultAnnouncement(intro);
+  await waitMs(700);
 
   for(const placeKey of sequence) {
     if(runId !== singleEventRevealRun) return;
-    setResultHostText(`And now, we are ready to announce the ${placeDisplayLabel(placeKey).toLowerCase()}.`);
-    speakResultAnnouncement(`Now I am going to announce the ${placeDisplayLabel(placeKey).toLowerCase()}.`);
-    renderRevealPrompt(prompt, placeKey);
-    await waitMs(5000);
-    if(runId !== singleEventRevealRun) return;
+    setResultHostMood(placeKey);
     const houseName = result[placeKey] || '—';
+    const spokenHouseName = cleanHouseAnnouncementName(houseName);
     const pointValue = pts[placeKey] ?? PLACE_POINTS[placeKey] ?? '—';
+    const announcement = `Now I am announcing the ${placeDisplayLabel(placeKey).toLowerCase()}. ${placeDisplayLabel(placeKey)} goes to ${spokenHouseName}.`;
+    setResultHostText(announcement);
+    renderRevealPrompt(prompt, placeKey);
+    await speakResultAnnouncement(announcement);
+    await waitMs(450);
+    if(runId !== singleEventRevealRun) return;
     await playCelebrationSounds(1200);
     burstResultConfetti();
-    const announcement = `${placeDisplayLabel(placeKey)} goes to ${houseName}.`;
-    setResultHostText(announcement);
-    speakResultAnnouncement(announcement);
     list.insertAdjacentHTML('afterbegin', renderRevealWinner(placeKey, houseName, `${pointValue} point${Number(pointValue) === 1 ? '' : 's'}`));
     prompt.innerHTML = placeKey === 'first_place'
       ? `<div class="result-reveal-finale">Champions Declared</div>`
       : `<div class="result-reveal-line">${placeDisplayLabel(placeKey)} locked in</div>`;
-    await waitMs(2800);
+    await waitMs(1200);
   }
 
   if(runId === singleEventRevealRun) {
-    setResultHostText(`All positions are now declared. Congratulations to ${result.first_place || 'the winning house'}.`);
-    speakResultAnnouncement(`All positions are now declared. Congratulations to ${result.first_place || 'the winning house'}.`);
+    setResultHostMood('finale');
+    const finale = `All positions are now declared. Congratulations to ${result.first_place || 'the winning house'}.`;
+    setResultHostText(finale);
+    await speakResultAnnouncement(finale);
     if(details) details.classList.add('visible');
   }
 }
@@ -4129,13 +4351,19 @@ async function loadSingleEventResult(eventId) {
   <div class="result-reveal-panel">
     <div class="result-reveal-title">Live Position Reveal</div>
     <div class="result-reveal-stage" id="singleEventRevealStage">
-      <div class="result-host">
+      <div class="result-host" id="singleEventResultHost" data-mood="intro" data-speaking="false">
         <div class="result-host-figure">
-          <img src="file:///C:/Users/sblku/Downloads/Cartoon-genie-coming-out-of-a-magic-lamp-on-transparent-background-PNG.avif" alt="Zinny genie host">
+          <img src="file:///C:/Users/sblku/Downloads/A%20cheerful%20cartoon%20genie%20with%20blue%20skin,%20glowing%20yellow%20eyes,%20and%20a%20golden%20turban%20with%20a%20red%20gem%20is%20emerging%20from%20a%20magical%20lamp%20surrounded%20by%20swirling%20blue%20smoke%20and%20sparkles.%20The%20genie%20has%20a%20friendl....png" alt="AI result host genie">
         </div>
         <div class="result-host-copy">
-          <div class="result-host-label">Zinny The Genie Host</div>
+          <div class="result-host-label">AI Result Host</div>
           <div class="result-host-line" id="resultHostLine">Welcome to the grand result declaration.</div>
+          <div class="result-host-wave" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
         </div>
       </div>
       <div class="result-reveal-prompt" id="singleEventRevealPrompt">

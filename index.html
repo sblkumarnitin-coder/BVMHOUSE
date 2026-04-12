@@ -326,6 +326,8 @@
     min-height: 430px;
     display: flex;
     flex-direction: column;
+    text-decoration: none;
+    color: inherit;
   }
   .chairman-preview-shell {
     display: flex;
@@ -710,15 +712,18 @@
     flex: 0 0 auto;
   }
   .gallery-overlay img {
-    width: min(92vw, 980px);
-    height: min(72vh, 720px);
+    width: min(96vw, 1180px);
+    height: auto;
+    max-height: none;
     flex: 0 0 auto;
-    object-fit: cover;
+    object-fit: contain;
     object-position: center;
     border-radius: 18px;
     background: rgba(255,255,255,0.03);
     border: 1px solid var(--border);
     box-shadow: 0 24px 80px rgba(0,0,0,0.45);
+    display: block;
+    margin: 0 auto 18px;
   }
   .toast {
     position: fixed;
@@ -1137,27 +1142,35 @@
         <p>Inter-house competition management for Bal Vidya Mandir, Sambhal</p>
       </div>
       <div class="stats-grid">
-        <div class="stat-card chairman-preview-card" onclick="showChairmanMessagePage()">
+        <a class="stat-card chairman-preview-card" href="#" onclick="showChairmanMessagePage(); return false;">
           <div class="chairman-preview-shell">
             <div class="chairman-preview-head">
               <strong>Chairman's Message</strong>
               <span>Tap To Open</span>
             </div>
             <img class="chairman-preview-frame" alt="Chairman message thumbnail" src="https://ik.imagekit.io/flr6iuzhm/Screenshot%202026-04-12%20135039.png">
-            <div class="chairman-preview-foot">Open the full Chairman's Message page.</div>
+            <div class="chairman-preview-foot">Open Chairman's PDF.</div>
           </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-num" id="statEvents">0</div>
-          <div class="stat-label">Total Events</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-num" id="statUpcoming">0</div>
-          <div class="stat-label">Upcoming Events</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-num" id="statHousePoints">4</div>
-          <div class="stat-label">Active Houses</div>
+        </a>
+        <a class="stat-card chairman-preview-card" href="#" onclick="showManagerMessagePage(); return false;">
+          <div class="chairman-preview-shell">
+            <div class="chairman-preview-head">
+              <strong>Manager's Message</strong>
+              <span>Tap To Open</span>
+            </div>
+            <img class="chairman-preview-frame" alt="Manager message thumbnail" src="https://ik.imagekit.io/flr6iuzhm/managersir.png">
+            <div class="chairman-preview-foot">Open Manager's PDF.</div>
+          </div>
+        </a>
+        <div class="stat-card chairman-preview-card" onclick="showPrincipalMessagePage()">
+          <div class="chairman-preview-shell">
+            <div class="chairman-preview-head">
+              <strong>Principal's Message</strong>
+              <span>Tap To Open</span>
+            </div>
+            <img class="chairman-preview-frame" alt="Principal message thumbnail" src="https://ik.imagekit.io/flr6iuzhm/principal%20sir.png">
+            <div class="chairman-preview-foot">Open the full Principal's page.</div>
+          </div>
         </div>
       </div>
       <div class="section-title">🏆 Championship Leaderboard</div>
@@ -1189,7 +1202,7 @@
           </div>
           <div class="form-group">
             <label>House Password</label>
-            <input type="password" id="participantHousePassword" placeholder="Enter house password">
+            <input type="password" id="participantHousePassword" placeholder="Enter house password" onkeydown="if(event.key==='Enter')authenticateHouse()">
           </div>
         </div>
         <button class="btn btn-primary" onclick="authenticateHouse()">✓ Verify & Continue</button>
@@ -1373,10 +1386,10 @@ const AUTH_HOUSE_COLUMN = 'house_name';
 const AUTH_PASSWORD_COLUMN = 'password';
 const HOUSE_BANNER_IMG = 'file:///C:/Users/sblku/OneDrive/Desktop/inter%20house%20web%20page/logo%20of%20house.jpeg';
 const HOUSE_META = {
-  ekta: { name: 'Ekta House', color: '#20bf55', cls: 'ekta', img: HOUSE_BANNER_IMG, logoPosition: '25% 75%' },
-  sankalp: { name: 'Sankalp House', color: '#e11d2f', cls: 'sankalp', img: HOUSE_BANNER_IMG, logoPosition: '25% 25%' },
-  prayas: { name: 'Prayas House', color: '#157fbe', cls: 'prayas', img: HOUSE_BANNER_IMG, logoPosition: '75% 25%' },
-  vishwas: { name: 'Vishwas House', color: '#f2c94c', cls: 'vishwas', img: HOUSE_BANNER_IMG, logoPosition: '75% 75%' }
+  ekta: { name: 'Ekta House', color: '#20bf55', cls: 'ekta', img: 'https://ik.imagekit.io/flr6iuzhm/ekta.jpg?updatedAt=1755956346875', logoPosition: 'center' },
+  sankalp: { name: 'Sankalp House', color: '#e11d2f', cls: 'sankalp', img: 'https://ik.imagekit.io/flr6iuzhm/sankalp.jpg?updatedAt=1755956347311', logoPosition: 'center' },
+  prayas: { name: 'Prayas House', color: '#157fbe', cls: 'prayas', img: 'https://ik.imagekit.io/flr6iuzhm/prayas.jpg?updatedAt=1755956347631', logoPosition: 'center' },
+  vishwas: { name: 'Vishwas House', color: '#f2c94c', cls: 'vishwas', img: 'https://ik.imagekit.io/flr6iuzhm/vishwas.jpg?updatedAt=1755956347586', logoPosition: 'center' }
 };
 
 let db = null;
@@ -1520,6 +1533,7 @@ function applySessionLabel(label) {
 // ── UTILITY FUNCTIONS ────────────────────────────────────────
 function esc(s) { if(!s) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function normalizeText(value) { return String(value || '').trim().toLowerCase(); }
+function normalizeAdmissionNo(value) { return String(value || '').replace(/\D/g, ''); }
 function formatEventLabel(eventOrName, forClass = '') {
   if(eventOrName && typeof eventOrName === 'object') {
     const name = String(eventOrName.event_name || '').trim();
@@ -1556,7 +1570,11 @@ async function verifyPasswordFromDatabase(role, name, enteredPassword) {
 }
 function houseKey(name) { 
   if(!name) return 'ekta';
-  const match = Object.keys(HOUSE_META).find(k => HOUSE_META[k].name.toLowerCase() === name.toLowerCase());
+  const raw = normalizeText(name);
+  const match = Object.keys(HOUSE_META).find(k => {
+    const canonical = normalizeText(HOUSE_META[k].name);
+    return canonical === raw || raw === k || raw.includes(k);
+  });
   return match || 'ekta';
 }
 
@@ -1574,7 +1592,10 @@ function showToast(message, type = 'info') {
 }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 function openModal(id) { document.getElementById(id).classList.add('open'); }
-function closeGallery() { document.getElementById('galleryOverlay').classList.remove('open'); }
+function closeGallery() {
+  document.getElementById('galleryOverlay').classList.remove('open');
+  showPage('dashboard', 'Dashboard');
+}
 
 // ── NAVIGATION ───────────────────────────────────────────────
 function showPage(id, title) {
@@ -1604,18 +1625,43 @@ function showPage(id, title) {
 }
 
 function showChairmanMessagePage() {
+  showPdfMessagePage("Chairman's Message", "https://ik.imagekit.io/flr6iuzhm/Chairman's%20Message.pdf");
+}
+
+function showManagerMessagePage() {
+  showPdfMessagePage("Manager's Message", "https://ik.imagekit.io/flr6iuzhm/Manager's%20Sir%20Article.pdf");
+}
+
+function showPrincipalMessagePage() {
+  showMessageAssetPage("Principal's Message", `<img class="chairman-message-frame" alt="Principal's Message" src="https://ik.imagekit.io/flr6iuzhm/principal%20massage.jpeg">`);
+}
+
+function showPdfMessagePage(title, pdfUrl) {
+  showMessageAssetPage(
+    title,
+    `<iframe class="chairman-message-frame" title="${esc(title)}" src="${pdfUrl}#toolbar=0&navpanes=0&page=1&view=FitH"></iframe>
+     <div style="margin-top:14px;text-align:center;">
+       <a class="btn btn-secondary" href="${pdfUrl}" target="_self" rel="noopener noreferrer">Open PDF Directly</a>
+     </div>
+     <div style="margin-top:12px;text-align:center;">
+       <button class="btn btn-secondary" onclick="showPage('dashboard','Dashboard')">← Back</button>
+     </div>`
+  );
+}
+
+function showMessageAssetPage(title, mediaHtml) {
   const dynPage = document.getElementById('page-dynamic');
   if(!dynPage) return;
   dynPage.innerHTML = `
     <div class="page-header">
-      <h1>Chairman's Message</h1>
+      <h1>${esc(title)}</h1>
       <p>Full message view</p>
     </div>
     <div class="chairman-message-panel">
-      <iframe class="chairman-message-frame" title="Chairman's Message" src="https://ik.imagekit.io/flr6iuzhm/Chairman's%20Message.pdf#toolbar=0&navpanes=0&page=1&view=FitH"></iframe>
+      ${mediaHtml}
     </div>
     <button class="btn btn-secondary" style="margin-top:18px" onclick="showPage('dashboard','Dashboard')">← Back</button>`;
-  showPage('dynamic', "Chairman's Message");
+  showPage('dynamic', title);
 }
 
 function toggleNav(id, el) {
@@ -1784,8 +1830,10 @@ async function loadEvents() {
     if(error) throw error;
     allEvents = data || [];
     const now = new Date();
-    document.getElementById('statEvents').textContent = allEvents.length;
-    document.getElementById('statUpcoming').textContent = allEvents.filter(e => e.open !== 'suspended' && !isEventPassed(e, now)).length;
+    const statEvents = document.getElementById('statEvents');
+    const statUpcoming = document.getElementById('statUpcoming');
+    if(statEvents) statEvents.textContent = allEvents.length;
+    if(statUpcoming) statUpcoming.textContent = allEvents.filter(e => e.open !== 'suspended' && !isEventPassed(e, now)).length;
     document.getElementById('eventCount').textContent = allEvents.length;
     renderEventsList();
     renderDashboardEvents();
@@ -2051,19 +2099,47 @@ async function onEventChange() {
 // ── STUDENT FILTERING (Case-insensitive, includes blank houses) ──
 function filterStudents() {
   if(!currentHouse) return;
-  const q = (document.getElementById('studentSearch')?.value || '').toLowerCase();
+  const q = normalizeText(document.getElementById('studentSearch')?.value || '');
+  const qAdmission = normalizeAdmissionNo(q);
+  const currentCanonicalHouse = canonicalHouseName(currentHouse);
+  const searchableStudents = allStudents.filter(s => normalizeText(s.student_name) || normalizeText(s.admission_no));
   
-  const pool = allStudents.filter(s => {
-    const studentHouse = (s.house || '').trim();
-    const houseMatches = studentHouse.toLowerCase() === currentHouse.toLowerCase();
+  const pool = searchableStudents.filter(s => {
+    const studentHouse = String(s.house || '').trim();
+    const houseMatches = canonicalHouseName(studentHouse) === currentCanonicalHouse;
     const houseBlank = studentHouse === '';
+    const studentName = normalizeText(s.student_name);
+    const admissionNo = normalizeText(s.admission_no);
+    const admissionDigits = normalizeAdmissionNo(s.admission_no);
+    const queryMatches = !q || studentName.includes(q) || admissionNo.includes(q) || (qAdmission && admissionDigits.includes(qAdmission));
     return (houseMatches || houseBlank) && 
-           (s.student_name.toLowerCase().includes(q) || String(s.admission_no).includes(q));
+           queryMatches;
   });
   
   const container = document.getElementById('studentPool');
   if(!container) return;
   if(!pool.length) { 
+    const outsideHouseMatches = !q ? [] : searchableStudents.filter(s => {
+      const studentName = normalizeText(s.student_name);
+      const admissionNo = normalizeText(s.admission_no);
+      const admissionDigits = normalizeAdmissionNo(s.admission_no);
+      const studentHouse = String(s.house || '').trim();
+      const queryMatches = studentName.includes(q) || admissionNo.includes(q) || (qAdmission && admissionDigits.includes(qAdmission));
+      const houseMatches = canonicalHouseName(studentHouse) === currentCanonicalHouse;
+      return queryMatches && !houseMatches && studentHouse !== '';
+    });
+    if(outsideHouseMatches.length) {
+      container.innerHTML = outsideHouseMatches.slice(0, 6).map(s => `
+        <div class="student-row warning" style="cursor:not-allowed;">
+          <div>
+            <div class="name"><strong>${esc(s.student_name || '—')}</strong></div>
+            <div class="meta">#${esc(s.admission_no || '—')} · Class ${esc(s.class || '—')}${s.section ? '-' + esc(s.section) : ''}</div>
+            <div class="meta" style="font-size:10px;color:var(--warning);">This student is stored under ${esc(s.house || 'another house')}, so it will not appear in ${esc(currentHouse)} participant selection.</div>
+          </div>
+          <span class="check">!</span>
+        </div>`).join('');
+      return;
+    }
     container.innerHTML = `<div class="empty" style="padding:20px"><p>No students found for ${currentHouse}</p></div>`; 
     return; 
   }
@@ -2098,9 +2174,9 @@ function toggleStudent(id, hasBlankHouse, alreadyRegistered = false) {
   const s = allStudents.find(x => x.id === id);
   if(!s) return;
   
-  const studentHouse = (s.house || '').trim().toLowerCase();
-  const currentHouseLower = currentHouse.toLowerCase();
-  if(studentHouse !== currentHouseLower) {
+  const studentHouse = canonicalHouseName(s.house || '');
+  const currentHouseCanonical = canonicalHouseName(currentHouse);
+  if(studentHouse !== currentHouseCanonical) {
     showToast(`This student belongs to ${s.house || 'an unassigned house'}. You can only select students from ${currentHouse}.`, 'error');
     return;
   }
@@ -2297,7 +2373,13 @@ function previewEventFile(input) {
     try {
       const wb = XLSX.read(new Uint8Array(evt.target.result), { type: 'array' });
       eventExcelData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-      renderPreview('eventFilePreview', eventExcelData.slice(0,5), ['event_name', 'for_class', 'open', 'event_date', 'participants']);
+      renderPreview('eventFilePreview', eventExcelData.slice(0,5).map(row => ({
+        event_name: getValue(row, ['event_name', 'eventname', 'event']),
+        for_class: getValue(row, ['for_class', 'forclass', 'class']),
+        open: getValue(row, ['open']),
+        event_date: getValue(row, ['event_date', 'eventdate', 'date']),
+        participants: getValue(row, ['participants', 'participant'])
+      })), ['event_name', 'for_class', 'open', 'event_date', 'participants']);
     } catch(e) { document.getElementById('eventFilePreview').innerHTML = `<div class="alert alert-error">Parse error: ${esc(e.message)}</div>`; }
   };
   reader.readAsArrayBuffer(file);
@@ -2320,20 +2402,35 @@ function downloadEventTemplate() {
 async function uploadEvents() {
   if(!isAdminLoggedIn) { showToast('Admin access required', 'error'); return; }
   if(!eventExcelData.length) { showToast('Select a file first', 'error'); return; }
+  const preview = document.getElementById('eventFilePreview');
+  if(preview) preview.innerHTML = `<div class="alert alert-info">Uploading events from Excel...</div>`;
   let ok = 0;
+  const problems = [];
   for(const row of eventExcelData) {
     const name = getValue(row, ['event_name', 'eventname', 'event']);
     if(!name) continue;
+    const normalizedDate = normalizeEventDateInput(getValue(row, ['event_date', 'eventdate', 'date']));
+    if(normalizedDate.error) {
+      problems.push(`${name}: ${normalizedDate.error}`);
+      continue;
+    }
+    const normalizedOpen = normalizeEventOpenValue(getValue(row, ['open']));
     const { error } = await db.from('events').insert([{
       event_name: name,
       for_class: getValue(row, ['for_class', 'forclass', 'class']) || '',
-      open: getValue(row, ['open']) || 'no',
-      event_date: getValue(row, ['event_date', 'eventdate', 'date']) || '',
+      open: normalizedOpen,
+      event_date: normalizedDate.value,
       participants: getValue(row, ['participants', 'participant']) || 'any'
     }]);
     if(!error) ok++;
+    else problems.push(`${name}: ${error.message || 'Upload failed'}`);
   }
-  showToast(`Uploaded ${ok} events`, 'success');
+  if(preview) {
+    preview.innerHTML = problems.length
+      ? `<div class="alert alert-warning">Uploaded ${ok} events. ${problems.length} row(s) need attention.<br>${esc(problems.slice(0, 6).join(' | '))}</div>`
+      : `<div class="alert alert-success">Uploaded ${ok} events successfully.</div>`;
+  }
+  showToast(problems.length ? `Uploaded ${ok} events with ${problems.length} issue(s)` : `Uploaded ${ok} events`, problems.length ? 'warning' : 'success');
   closeModal('eventUploadModal');
   eventExcelData = [];
   loadEvents();
@@ -2345,6 +2442,41 @@ function getValue(row, keys) {
     if(entry && entry[1] !== undefined) return String(entry[1]); 
   } 
   return ''; 
+}
+
+function normalizeEventOpenValue(value) {
+  const text = String(value || '').trim().toLowerCase();
+  if(text === 'yes' || text === 'open' || text === 'y') return 'yes';
+  if(text === 'suspended') return 'suspended';
+  return 'no';
+}
+
+function normalizeEventDateInput(value) {
+  const raw = String(value || '').trim();
+  if(!raw) return { value: '' };
+  const directIso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(directIso) return { value: raw };
+  const dmy = raw.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+  if(dmy) {
+    const dd = dmy[1].padStart(2, '0');
+    const mm = dmy[2].padStart(2, '0');
+    const yyyy = dmy[3];
+    if(Number(mm) < 1 || Number(mm) > 12 || Number(dd) < 1 || Number(dd) > 31) {
+      return { error: `invalid date "${raw}"` };
+    }
+    return { value: `${yyyy}-${mm}-${dd}` };
+  }
+  const excelDateNumber = Number(raw);
+  if(!Number.isNaN(excelDateNumber) && excelDateNumber > 20000) {
+    const parsed = XLSX.SSF.parse_date_code(excelDateNumber);
+    if(parsed) {
+      const yyyy = String(parsed.y);
+      const mm = String(parsed.m).padStart(2, '0');
+      const dd = String(parsed.d).padStart(2, '0');
+      return { value: `${yyyy}-${mm}-${dd}` };
+    }
+  }
+  return { error: `unsupported date format "${raw}"` };
 }
 
 function renderPreview(containerId, rows, cols) {

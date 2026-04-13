@@ -1533,7 +1533,18 @@ function applySessionLabel(label) {
 // ── UTILITY FUNCTIONS ────────────────────────────────────────
 function esc(s) { if(!s) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function normalizeText(value) { return String(value || '').trim().toLowerCase(); }
-function normalizeAdmissionNo(value) { return String(value || '').replace(/\D/g, ''); }
+function normalizeAdmissionNo(value) {
+  const raw = String(value ?? '').trim();
+  if(!raw) return '';
+  if(typeof value === 'number' && Number.isFinite(value)) return String(Math.trunc(value));
+  if(/^\d+\.0+$/.test(raw)) return raw.replace(/\.0+$/, '');
+  return raw.replace(/\D/g, '');
+}
+function admissionLookupKey(value) {
+  const normalizedDigits = normalizeAdmissionNo(value);
+  if(normalizedDigits) return normalizedDigits;
+  return normalizeText(value).replace(/\s+/g, '');
+}
 function formatEventLabel(eventOrName, forClass = '') {
   if(eventOrName && typeof eventOrName === 'object') {
     const name = String(eventOrName.event_name || '').trim();
@@ -1569,13 +1580,15 @@ async function verifyPasswordFromDatabase(role, name, enteredPassword) {
   }
 }
 function houseKey(name) { 
-  if(!name) return 'ekta';
+  if(!name) return '';
   const raw = normalizeText(name);
+  const compact = raw.replace(/[^a-z]/g, '');
   const match = Object.keys(HOUSE_META).find(k => {
     const canonical = normalizeText(HOUSE_META[k].name);
-    return canonical === raw || raw === k || raw.includes(k);
+    const canonicalCompact = canonical.replace(/[^a-z]/g, '');
+    return canonical === raw || raw === k || raw.includes(k) || compact === canonicalCompact || compact === k;
   });
-  return match || 'ekta';
+  return match || '';
 }
 
 function canonicalHouseName(name) {
@@ -1799,7 +1812,7 @@ async function loadRegistrationsForHouse(eventId, houseName) {
   }
   const uniqueByAdmission = new Map();
   rows.forEach(row => {
-    const admission = String(row.admission_no || '').trim();
+    const admission = admissionLookupKey(row.admission_no);
     if(admission && !uniqueByAdmission.has(admission)) uniqueByAdmission.set(admission, row);
   });
   return [...uniqueByAdmission.values()];
@@ -1809,9 +1822,23 @@ async function loadRegistrationsForHouse(eventId, houseName) {
 async function loadStudents() {
   if(!db) return;
   try {
-    const { data, error } = await db.from('students').select('*').order('student_name', { ascending: true });
-    if(error) throw error;
-    allStudents = data || [];
+    const batchSize = 1000;
+    let from = 0;
+    let fetched = [];
+    while(true) {
+      const to = from + batchSize - 1;
+      const { data, error } = await db
+        .from('students')
+        .select('*')
+        .order('student_name', { ascending: true })
+        .range(from, to);
+      if(error) throw error;
+      const batch = data || [];
+      fetched = fetched.concat(batch);
+      if(batch.length < batchSize) break;
+      from += batchSize;
+    }
+    allStudents = fetched;
     const statStudents = document.getElementById('statStudents');
     if(statStudents) statStudents.textContent = allStudents.length;
     document.getElementById('studentCount').textContent = allStudents.length;
@@ -2068,7 +2095,7 @@ async function onEventChange() {
     if(!existingRows) {
       showToast('Could not load existing registrations for this event', 'warning');
     } else {
-      currentEventRegisteredAdmissions = existingRows.map(row => String(row.admission_no || '').trim()).filter(Boolean);
+      currentEventRegisteredAdmissions = existingRows.map(row => admissionLookupKey(row.admission_no)).filter(Boolean);
       currentEventRegisteredCount = currentEventRegisteredAdmissions.length;
     }
   }
@@ -2101,10 +2128,11 @@ function filterStudents() {
   if(!currentHouse) return;
   const q = normalizeText(document.getElementById('studentSearch')?.value || '');
   const qAdmission = normalizeAdmissionNo(q);
+  const qAdmissionKey = admissionLookupKey(q);
   const currentCanonicalHouse = canonicalHouseName(currentHouse);
   const searchableStudents = allStudents.filter(s => normalizeText(s.student_name) || normalizeText(s.admission_no));
   
-  const pool = searchableStudents.filter(s => {
+  let pool = searchableStudents.filter(s => {
     const studentHouse = String(s.house || '').trim();
     const houseMatches = canonicalHouseName(studentHouse) === currentCanonicalHouse;
     const houseBlank = studentHouse === '';
@@ -2115,6 +2143,16 @@ function filterStudents() {
     return (houseMatches || houseBlank) && 
            queryMatches;
   });
+
+  if(!pool.length && qAdmissionKey) {
+    const directAdmissionMatches = searchableStudents.filter(s => {
+      const studentHouse = String(s.house || '').trim();
+      const houseMatches = canonicalHouseName(studentHouse) === currentCanonicalHouse;
+      const houseBlank = studentHouse === '';
+      return (houseMatches || houseBlank) && admissionLookupKey(s.admission_no) === qAdmissionKey;
+    });
+    if(directAdmissionMatches.length) pool = directAdmissionMatches;
+  }
   
   const container = document.getElementById('studentPool');
   if(!container) return;
@@ -2148,7 +2186,7 @@ function filterStudents() {
     const studentHouse = (s.house || '').trim();
     const isSelected = selectedStudents.some(x => x.id === s.id);
     const hasBlankHouse = studentHouse === '';
-    const alreadyRegistered = currentEventRegisteredAdmissions.includes(String(s.admission_no || '').trim());
+    const alreadyRegistered = currentEventRegisteredAdmissions.includes(admissionLookupKey(s.admission_no));
 
     return `<div class="student-row ${isSelected ? 'selected' : ''} ${hasBlankHouse ? 'warning' : ''} ${alreadyRegistered ? 'selected' : ''}" onclick="toggleStudent(${s.id}, ${hasBlankHouse}, ${alreadyRegistered})">
       <div>
@@ -2246,7 +2284,7 @@ async function registerParticipants() {
   const eventName = opt.text.split(' (')[0];
   const eventId = parseInt(sel.value);
   const table = isOpen ? 'open_participants' : 'house_participants';
-  const selectedAdmissions = selectedStudents.map(s => String(s.admission_no || '').trim());
+  const selectedAdmissions = selectedStudents.map(s => admissionLookupKey(s.admission_no)).filter(Boolean);
   const duplicateSelection = selectedAdmissions.filter(adm => currentEventRegisteredAdmissions.includes(adm));
   if(duplicateSelection.length) {
     showToast('Some selected students are already registered for this event.', 'error');
@@ -2254,7 +2292,7 @@ async function registerParticipants() {
     return;
   }
   const existingRows = await loadRegistrationsForHouse(eventId, currentHouse);
-  const existingAdmissions = existingRows.map(row => String(row.admission_no || '').trim()).filter(Boolean);
+  const existingAdmissions = existingRows.map(row => admissionLookupKey(row.admission_no)).filter(Boolean);
   const refreshedTotal = existingAdmissions.length + selectedAdmissions.length;
   const rangeMatch = String(currentEventReq || '').match(/(\d+)\s*(?:to|-)\s*(\d+)/i);
   if(rangeMatch) {
@@ -2275,7 +2313,7 @@ async function registerParticipants() {
   
   let ok = 0;
   for(const s of selectedStudents) {
-    if(existingAdmissions.includes(String(s.admission_no || '').trim())) continue;
+    if(existingAdmissions.includes(admissionLookupKey(s.admission_no))) continue;
     const { error } = await db.from(table).insert([{
       admission_no: s.admission_no,
       student_name: s.student_name,
@@ -2337,7 +2375,7 @@ async function uploadStudents() {
   status.innerHTML = `<div class="alert alert-info">Uploading...</div>`;
   let ok = 0;
   for(const row of studentExcelData) {
-    const adm = String(row.admission_no || '').trim();
+    const adm = admissionLookupKey(row.admission_no);
     const name = String(row.student_name || '').trim();
     if(!adm || !name) continue;
     const { data: ex } = await db.from('students').select('id').eq('admission_no', adm);
@@ -2731,7 +2769,7 @@ function populateFindEventDropdown() {
 
 function buildFindEventGroups(events, participantsByEvent, resultsByEvent, selectedHouse = '') {
   const filterHouse = canonicalHouseName(selectedHouse || '');
-  const studentByAdmission = new Map((allStudents || []).map(student => [String(student.admission_no || '').trim(), student]));
+  const studentByAdmission = new Map((allStudents || []).map(student => [admissionLookupKey(student.admission_no), student]));
   const groups = [];
   events.forEach(event => {
     const eventId = parseInt(event.id, 10);
@@ -2746,15 +2784,15 @@ function buildFindEventGroups(events, participantsByEvent, resultsByEvent, selec
     if(result?.event_type === 'open') {
       ['first', 'second', 'third'].forEach(place => {
         const entries = Array.isArray(noteData?.open_results?.[place]) ? noteData.open_results[place] : (noteData?.open_results?.[place] ? [noteData.open_results[place]] : []);
-        entries.forEach(student => openPlacementByAdmission.set(String(student.admission_no || '').trim(), `${place.charAt(0).toUpperCase() + place.slice(1)} Place`));
+        entries.forEach(student => openPlacementByAdmission.set(admissionLookupKey(student.admission_no), `${place.charAt(0).toUpperCase() + place.slice(1)} Place`));
       });
     }
     const students = eventParticipants.map(participant => {
-      const linkedStudent = studentByAdmission.get(String(participant.admission_no || '').trim()) || {};
+      const linkedStudent = studentByAdmission.get(admissionLookupKey(participant.admission_no)) || {};
       const participantHouse = canonicalHouseName(participant.house || participant.registered_by || linkedStudent.house);
       let declaredResult = '';
       if(result?.event_type === 'house') declaredResult = getHousePlaceInResult(result, participantHouse);
-      else if(result?.event_type === 'open') declaredResult = participant.result_place || openPlacementByAdmission.get(String(participant.admission_no || '').trim()) || '';
+      else if(result?.event_type === 'open') declaredResult = participant.result_place || openPlacementByAdmission.get(admissionLookupKey(participant.admission_no)) || '';
       return {
         house: canonicalHouseName(participant.house || participant.registered_by),
         details: 'Participant',
@@ -2885,7 +2923,7 @@ function buildOpenParticipantsFallbackFromResult(resultRow, fallbackEvent = null
     : flattenedOpenResults;
   const deduped = new Map();
   sourceRows.forEach(row => {
-    const admission = String(row.admission_no || '').trim();
+    const admission = admissionLookupKey(row.admission_no);
     const key = admission || `${String(row.student_name || '').trim()}|${String(row.class || '').trim()}|${String(row.section || '').trim()}`;
     if(!key || deduped.has(key)) return;
     deduped.set(key, {
@@ -3185,10 +3223,10 @@ async function getOpenEventParticipants(eventId) {
   });
   const deduped = new Map();
   rows.forEach(row => {
-    const admission = String(row.admission_no || '').trim();
+    const admission = admissionLookupKey(row.admission_no);
     const key = admission || `${String(row.student_name || '').trim()}|${String(row.class || '').trim()}|${String(row.section || '').trim()}`;
     if(!key || deduped.has(key)) return;
-    const linkedStudent = allStudents.find(student => String(student.admission_no || '').trim() === admission) || {};
+    const linkedStudent = allStudents.find(student => admissionLookupKey(student.admission_no) === admission) || {};
     deduped.set(key, {
       ...linkedStudent,
       ...row,
@@ -3357,7 +3395,7 @@ async function saveOpenParticipantResultDetails(eventId, entries, houseSummary) 
   if(defaultOpenUpdate.error && !firstError) firstError = defaultOpenUpdate.error;
   for(const entry of entries) {
     const student = entry.student || {};
-    const admissionNo = String(student.admission_no || '').trim();
+    const admissionNo = admissionLookupKey(student.admission_no);
     const resultPlace = `${getOpenResultPlaceLabel(entry.place)} Place`;
     const payload = {
       event_id: eventId,

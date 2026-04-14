@@ -1195,8 +1195,8 @@
             <select id="participantHouseSelect">
               <option value="">— Select House —</option>
 <option value="Ekta House">🟢 Ekta House</option>
-<option value="Sankalp House">🔴 Sankalp House</option>
 <option value="Prayas House">🔵 Prayas House</option>
+<option value="Sankalp House">🔴 Sankalp House</option>
 <option value="Vishwas House">🟡 Vishwas House</option>
             </select>
           </div>
@@ -1253,7 +1253,7 @@
       <div class="panel">
         <h3>Upload Excel File</h3>
         <p style="font-size:12px; color:var(--muted); margin-bottom:12px;">
-          Required columns: <code>admission_no, student_name, class, section, house, father_name, gender, contact_number</code>
+Required columns: <code>admission_no, roll_no, student_name, class, section, house, father_name, gender, contact_number</code>
         </p>
         <div class="upload-zone" onclick="document.getElementById('studentFile').click()">
           <div class="upload-icon">📁</div>
@@ -1316,7 +1316,7 @@
       <div class="panel">
         <div class="form-grid">
           <div class="form-group"><label>Event</label><select id="findEventSelect"><option value="">— All Events —</option></select></div>
-          <div class="form-group"><label>House</label><select id="findHouseSelect"><option value="">— All Houses —</option><option>Ekta House</option><option>Sankalp House</option><option>Prayas House</option><option>Vishwas House</option></select></div>
+<div class="form-group"><label>House</label><select id="findHouseSelect"><option value="">— All Houses —</option><option>Ekta House</option><option>Prayas House</option><option>Sankalp House</option><option>Vishwas House</option></select></div>
         </div>
         <div style="display:flex; gap:12px; flex-wrap:wrap;">
           <button class="btn btn-primary" onclick="findByEventHouse()">Search</button>
@@ -1544,6 +1544,68 @@ function admissionLookupKey(value) {
   const normalizedDigits = normalizeAdmissionNo(value);
   if(normalizedDigits) return normalizedDigits;
   return normalizeText(value).replace(/\s+/g, '');
+}
+function compareAscending(a, b) {
+  return String(a || '').localeCompare(String(b || ''), undefined, { numeric: true, sensitivity: 'base' });
+}
+function normalizeClassValue(value) {
+  const raw = String(value || '').trim().toUpperCase();
+  if(!raw) return Number.MAX_SAFE_INTEGER;
+  const romanMap = {
+    I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6,
+    VII: 7, VIII: 8, IX: 9, X: 10, XI: 11, XII: 12
+  };
+  if(romanMap[raw] !== undefined) return romanMap[raw];
+  const numberOnly = parseInt(raw.replace(/[^\d]/g, ''), 10);
+  if(!isNaN(numberOnly)) return numberOnly;
+  return Number.MAX_SAFE_INTEGER - 1;
+}
+function compareClassAscending(a, b) {
+  const aNum = normalizeClassValue(a);
+  const bNum = normalizeClassValue(b);
+  if(aNum !== bNum) return aNum - bNum;
+  return compareAscending(a, b);
+}
+function compareHouseOrder(a, b) {
+  const aHouse = canonicalHouseName(a || '');
+  const bHouse = canonicalHouseName(b || '');
+  const aIndex = HOUSE_ORDER.indexOf(aHouse);
+  const bIndex = HOUSE_ORDER.indexOf(bHouse);
+  if(aIndex !== -1 || bIndex !== -1) return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+  return compareAscending(aHouse, bHouse);
+}
+function getResultPlaceRank(value) {
+  const raw = normalizeText(value);
+  if(raw.includes('first')) return 1;
+  if(raw.includes('second')) return 2;
+  if(raw.includes('third')) return 3;
+  if(raw.includes('fourth')) return 4;
+  return 999;
+}
+function compareStudentsAscending(a = {}, b = {}) {
+  return compareClassAscending(a.class, b.class) ||
+    compareAscending(a.section, b.section) ||
+    compareAscending(a.roll_no || a.roll, b.roll_no || b.roll) ||
+    compareAscending(a.admission_no, b.admission_no) ||
+    compareAscending(a.student_name || a.name, b.student_name || b.name);
+}
+function sortStudentsAscending(students = []) {
+  return [...students].sort(compareStudentsAscending);
+}
+function sortEventsAscending(events = []) {
+  return [...events].sort((a, b) =>
+    compareAscending(a.event_date, b.event_date) ||
+    compareAscending(formatEventLabel(a), formatEventLabel(b))
+  );
+}
+function getSortedHouseNames() {
+  return Object.values(HOUSE_META).map(meta => meta.name).sort(compareAscending);
+}
+function getRowValue(row = {}, keys = []) {
+  for(const key of keys) {
+    if(row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== '') return row[key];
+  }
+  return '';
 }
 function formatEventLabel(eventOrName, forClass = '') {
   if(eventOrName && typeof eventOrName === 'object') {
@@ -1838,7 +1900,7 @@ async function loadStudents() {
       if(batch.length < batchSize) break;
       from += batchSize;
     }
-    allStudents = fetched;
+    allStudents = sortStudentsAscending(fetched);
     const statStudents = document.getElementById('statStudents');
     if(statStudents) statStudents.textContent = allStudents.length;
     document.getElementById('studentCount').textContent = allStudents.length;
@@ -1855,7 +1917,7 @@ async function loadEvents() {
     await loadResults();
     const { data, error } = await db.from('events').select('*').order('event_date', { ascending: true });
     if(error) throw error;
-    allEvents = data || [];
+    allEvents = sortEventsAscending(data || []);
     const now = new Date();
     const statEvents = document.getElementById('statEvents');
     const statUpcoming = document.getElementById('statUpcoming');
@@ -1872,8 +1934,8 @@ function renderStudentList() {
   const el = document.getElementById('studentList');
   if(!el) return;
   if(!allStudents.length) { el.innerHTML = `<div class="empty" style="padding:40px"><p>No students yet</p></div>`; return; }
-  el.innerHTML = `<div style="overflow-x:auto"><table class="data-table"><thead><tr><th>Adm No.</th><th>Name</th><th>Class</th><th>Section</th><th>House</th><th>Contact No.</th><th>Actions</th></tr></thead><tbody>` +
-    allStudents.map(s => `<tr><td>${esc(s.admission_no)}</td><td><strong>${esc(s.student_name)}</strong></td><td>${esc(s.class)}</td><td>${esc(s.section)}</td><td><span style="color:${HOUSE_META[houseKey(s.house)]?.color || '#fff'}">${esc(s.house || 'Not Assigned')}</span></td><td>${esc(s.contact_number || s.phone || 'â€”')}</td><td><button class="btn btn-danger btn-sm" onclick="deleteStudent(${s.id})">Delete</button></td></tr>`).join('') + `</tbody></table></div>`;
+  el.innerHTML = `<div style="overflow-x:auto"><table class="data-table"><thead><tr><th>Adm No.</th><th>Roll No.</th><th>Name</th><th>Class</th><th>Section</th><th>House</th><th>Contact No.</th><th>Actions</th></tr></thead><tbody>` +
+    sortStudentsAscending(allStudents).map(s => `<tr><td>${esc(s.admission_no)}</td><td>${esc(s.roll_no || s.roll || '—')}</td><td><strong>${esc(s.student_name)}</strong></td><td>${esc(s.class)}</td><td>${esc(s.section)}</td><td><span style="color:${HOUSE_META[houseKey(s.house)]?.color || '#fff'}">${esc(s.house || 'Not Assigned')}</span></td><td>${esc(s.contact_number || s.phone || 'â€”')}</td><td><button class="btn btn-danger btn-sm" onclick="deleteStudent(${s.id})">Delete</button></td></tr>`).join('') + `</tbody></table></div>`;
 }
 
 async function deleteStudent(id) {
@@ -2310,12 +2372,37 @@ async function registerParticipants() {
       return;
     }
   }
+
+  if(!isOpen) {
+    const { data: houseParticipationRows, error: houseParticipationError } = await db
+      .from('house_participants')
+      .select('admission_no, event_id');
+    if(houseParticipationError) {
+      console.error('house participation count error:', houseParticipationError);
+      showToast('Could not verify previous house-event participation count.', 'error');
+      return;
+    }
+    const blockedStudents = selectedStudents.filter(student => {
+      const admission = admissionLookupKey(student.admission_no);
+      const existingEventIds = new Set((houseParticipationRows || [])
+        .filter(row => admissionLookupKey(row.admission_no) === admission)
+        .map(row => String(row.event_id || '').trim())
+        .filter(Boolean));
+      existingEventIds.add(String(eventId));
+      return existingEventIds.size > 2;
+    });
+    if(blockedStudents.length) {
+      showToast(`${blockedStudents.map(student => student.student_name).join(', ')} cannot be registered. A student can participate in at most 2 house events.`, 'error');
+      return;
+    }
+  }
   
   let ok = 0;
   for(const s of selectedStudents) {
     if(existingAdmissions.includes(admissionLookupKey(s.admission_no))) continue;
     const { error } = await db.from(table).insert([{
       admission_no: s.admission_no,
+      roll_no: s.roll_no || s.roll || '',
       student_name: s.student_name,
       class: s.class,
       section: s.section,
@@ -2345,7 +2432,7 @@ function previewStudentFile(input) {
     try {
       const wb = XLSX.read(new Uint8Array(evt.target.result), { type: 'array' });
       studentExcelData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-      renderPreview('studentPreview', studentExcelData.slice(0,5), ['admission_no', 'student_name', 'class', 'section', 'house', 'father_name', 'gender', 'contact_number']);
+      renderPreview('studentPreview', studentExcelData.slice(0,5), ['admission_no', 'roll_no', 'student_name', 'class', 'section', 'house', 'father_name', 'gender', 'contact_number']);
     } catch(e) { document.getElementById('studentPreview').innerHTML = `<div class="alert alert-error">Parse error: ${esc(e.message)}</div>`; }
   };
   reader.readAsArrayBuffer(file);
@@ -2354,6 +2441,7 @@ function previewStudentFile(input) {
 function downloadStudentTemplate() {
   const rows = [{
     admission_no: '11119',
+    roll_no: '12',
     student_name: 'Student Name',
     class: 'IX',
     section: 'A',
@@ -2373,15 +2461,15 @@ async function uploadStudents() {
   if(!studentExcelData.length) { showToast('Select a file first', 'error'); return; }
   const status = document.getElementById('studentUploadStatus');
   status.innerHTML = `<div class="alert alert-info">Uploading...</div>`;
-  let ok = 0;
+  let inserted = 0;
+  let updated = 0;
   for(const row of studentExcelData) {
-    const adm = admissionLookupKey(row.admission_no);
+    const adm = admissionLookupKey(getRowValue(row, ['admission_no', 'admission no', 'admission']));
     const name = String(row.student_name || '').trim();
     if(!adm || !name) continue;
-    const { data: ex } = await db.from('students').select('id').eq('admission_no', adm);
-    if(ex?.length) continue;
-    const { error } = await db.from('students').insert([{
+    const payload = {
       admission_no: adm,
+      roll_no: String(getRowValue(row, ['roll_no', 'roll no', 'roll_number', 'roll number', 'rollno', 'roll']) || ''),
       student_name: name,
       class: String(row.class || ''),
       section: String(row.section || ''),
@@ -2389,11 +2477,19 @@ async function uploadStudents() {
       father_name: String(row.father_name || ''),
       gender: String(row.gender || ''),
       phone: String(row.contact_number || row.phone || '')
-    }]);
-    if(!error) ok++;
+    };
+    const { data: ex } = await db.from('students').select('id').eq('admission_no', adm);
+    let error = null;
+    if(ex?.length) {
+      ({ error } = await db.from('students').update(payload).eq('id', ex[0].id));
+      if(!error) updated++;
+    } else {
+      ({ error } = await db.from('students').insert([payload]));
+      if(!error) inserted++;
+    }
   }
-  status.innerHTML = `<div class="alert alert-success">✅ Added ${ok} new students</div>`;
-  showToast(`Added ${ok} students`, 'success');
+  status.innerHTML = `<div class="alert alert-success">✅ Inserted ${inserted} new students and updated ${updated} existing students</div>`;
+  showToast(`Inserted ${inserted}, updated ${updated} students`, 'success');
   studentExcelData = [];
   setTimeout(() => loadStudents(), 800);
 }
@@ -2665,7 +2761,8 @@ function renderStudentLookupCard(student = {}) {
 }
 
 function renderStudentLookupTable(students = []) {
-  const hasAnyResult = students.some(student => getStudentDeclaredResult(student));
+  const sortedStudents = sortStudentsAscending(students);
+  const hasAnyResult = sortedStudents.some(student => getStudentDeclaredResult(student));
   return `<table class="events-table">
     <thead>
       <tr>
@@ -2682,7 +2779,7 @@ function renderStudentLookupTable(students = []) {
       </tr>
     </thead>
     <tbody>
-      ${students.map((student, i) => {
+      ${sortedStudents.map((student, i) => {
         const resultText = getStudentDeclaredResult(student);
         return `<tr>
           <td>${i + 1}</td>
@@ -2705,7 +2802,7 @@ async function showFindHouseWise() {
   document.getElementById('page-dynamic').innerHTML = `
     <div class="page-header"><h1>Find by House</h1></div>
     <div class="panel"><div class="form-group" style="max-width:300px"><label>House</label>
-    <select id="fhSelect"><option value="">— Select House —</option><option>Ekta House</option><option>Sankalp House</option><option>Prayas House</option><option>Vishwas House</option></select></div></div>
+    <select id="fhSelect"><option value="">— Select House —</option>${getSortedHouseNames().map(house => `<option>${esc(house)}</option>`).join('')}</select></div></div>
     <div id="fhResults" class="events-grid"></div>
     <button class="btn btn-secondary" style="margin-top:16px" onclick="showPage('dashboard','Dashboard')">← Back</button>`;
   showPage('dynamic', 'Find by House');
@@ -2715,8 +2812,9 @@ async function showFindHouseWise() {
       document.getElementById('fhResults').innerHTML = `<div class="empty">Loading...</div>`;
       const { data } = await db.from('students').select('*').ilike('house', `%${h}%`);
       if(!data?.length) { document.getElementById('fhResults').innerHTML = `<div class="empty"><p>No students found</p></div>`; return; }
-      const cards3 = data.map(renderStudentLookupCard).join('');
-      const table3 = renderStudentLookupTable(data);
+      const sortedData = sortStudentsAscending(data || []);
+      const cards3 = sortedData.map(renderStudentLookupCard).join('');
+      const table3 = renderStudentLookupTable(sortedData);
       document.getElementById('fhResults').innerHTML = `<div class="events-grid">${cards3}</div>${table3}`;
     };
   }, 100);
@@ -2727,9 +2825,9 @@ async function showFindClassSection() {
   const classes = [...new Set(allStudents.map(s => s.class).filter(Boolean))].sort();
   document.getElementById('page-dynamic').innerHTML = `
     <div class="page-header"><h1>Find by Class & Section</h1></div>
-    <div class="panel"><div class="form-grid"><div class="form-group"><label>Class</label><select id="fcClass"><option value="">— Class —</option>${classes.map(c => `<option>${c}</option>`).join('')}</select></div>
+    <div class="panel"><div class="form-grid"><div class="form-group"><label>Class</label><select id="fcClass"><option value="">— Class —</option>${classes.sort((a, b) => compareClassAscending(a, b)).map(c => `<option>${c}</option>`).join('')}</select></div>
     <div class="form-group"><label>Section</label><select id="fcSection" disabled><option value="">— Select class first —</option></select></div>
-    <div class="form-group"><label>House (optional)</label><select id="fcHouse"><option value="">All Houses</option><option>Ekta House</option><option>Sankalp House</option><option>Prayas House</option><option>Vishwas House</option></select></div></div></div>
+    <div class="form-group"><label>House (optional)</label><select id="fcHouse"><option value="">All Houses</option>${getSortedHouseNames().map(house => `<option>${esc(house)}</option>`).join('')}</select></div></div></div>
     <div id="fcResults" class="events-grid"></div>
     <button class="btn btn-secondary" style="margin-top:16px" onclick="showPage('dashboard','Dashboard')">← Back</button>`;
   showPage('dynamic', 'Find by Class & Section');
@@ -2745,14 +2843,15 @@ async function showFindClassSection() {
       if(hv) q = q.ilike('house', `%${hv}%`);
       const { data } = await q;
       if(!data?.length) { document.getElementById('fcResults').innerHTML = `<div class="empty"><p>No students found</p></div>`; return; }
-      const cards4 = data.map(renderStudentLookupCard).join('');
-      const table4 = renderStudentLookupTable(data);
+      const sortedData = sortStudentsAscending(data || []);
+      const cards4 = sortedData.map(renderStudentLookupCard).join('');
+      const table4 = renderStudentLookupTable(sortedData);
       document.getElementById('fcResults').innerHTML = `<div class="events-grid">${cards4}</div>${table4}`;
     };
     cls.onchange = () => {
       sec.innerHTML = '<option value="">— Section —</option>';
       if(cls.value) {
-        const secs = [...new Set(allStudents.filter(s => s.class === cls.value).map(s => s.section).filter(Boolean))];
+        const secs = [...new Set(allStudents.filter(s => s.class === cls.value).map(s => s.section).filter(Boolean))].sort((a, b) => compareAscending(a, b));
         secs.forEach(s => sec.innerHTML += `<option>${s}</option>`);
         sec.disabled = false;
       } else sec.disabled = true;
@@ -2764,7 +2863,7 @@ async function showFindClassSection() {
 function populateFindEventDropdown() {
   const sel = document.getElementById('findEventSelect');
   if(!sel) return;
-  sel.innerHTML = '<option value="">— All Events —</option>' + allEvents.map(e => `<option value="${e.id}">${esc(formatEventLabel(e))}</option>`).join('');
+  sel.innerHTML = '<option value="">— All Events —</option>' + sortEventsAscending(allEvents).map(e => `<option value="${e.id}">${esc(formatEventLabel(e))}</option>`).join('');
 }
 
 function buildFindEventGroups(events, participantsByEvent, resultsByEvent, selectedHouse = '') {
@@ -2787,7 +2886,7 @@ function buildFindEventGroups(events, participantsByEvent, resultsByEvent, selec
         entries.forEach(student => openPlacementByAdmission.set(admissionLookupKey(student.admission_no), `${place.charAt(0).toUpperCase() + place.slice(1)} Place`));
       });
     }
-    const students = eventParticipants.map(participant => {
+    const students = sortStudentsAscending(eventParticipants.map(participant => {
       const linkedStudent = studentByAdmission.get(admissionLookupKey(participant.admission_no)) || {};
       const participantHouse = canonicalHouseName(participant.house || participant.registered_by || linkedStudent.house);
       let declaredResult = '';
@@ -2805,7 +2904,7 @@ function buildFindEventGroups(events, participantsByEvent, resultsByEvent, selec
         gender: participant.gender || linkedStudent.gender || '',
         result: declaredResult
       };
-    });
+    }));
     const housePointRows = result?.event_type === 'open' ? (noteData?.placement_rows || []).filter(row => {
       const houses = String(row.houses || '').split(',').map(v => canonicalHouseName(v.trim())).filter(Boolean);
       return !filterHouse || houses.includes(filterHouse);
@@ -2833,6 +2932,10 @@ function renderFindEventHouseTable(groups) {
     </div>
     ${groups.map(group => {
       const hasAnyResult = group.students.some(student => String(student.result || '').trim());
+      const orderedStudents = hasAnyResult
+        ? [...group.students].sort((a, b) => getResultPlaceRank(a.result) - getResultPlaceRank(b.result) || compareStudentsAscending(a, b))
+        : [...group.students].sort((a, b) => compareHouseOrder(a.house, b.house) || compareStudentsAscending(a, b));
+      const orderedHousePointRows = [...group.housePointRows].sort((a, b) => getResultPlaceRank(a.place) - getResultPlaceRank(b.place) || compareHouseOrder(a.houses, b.houses));
       return `<div style="margin-top:18px;">
         <div style="font-family:'Cinzel',serif;font-size:18px;color:var(--gold);font-weight:700;">${esc(group.event_name)}</div>
         <div style="margin-top:6px;font-size:12px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap;">
@@ -2840,7 +2943,7 @@ function renderFindEventHouseTable(groups) {
           ${group.event_date ? `<span>Date: ${esc(group.event_date)}</span>` : ''}
         </div>
         <div class="events-grid" style="margin-top:12px;">
-          ${group.students.map(student => {
+          ${orderedStudents.map(student => {
             const resultText = getStudentDeclaredResult(student);
             return `<div class="event-card">
               <h3>${esc(student.student_name || '—')}</h3>
@@ -2870,7 +2973,7 @@ function renderFindEventHouseTable(groups) {
               </tr>
             </thead>
             <tbody>
-              ${group.students.length ? group.students.map(student => `<tr>
+              ${orderedStudents.length ? orderedStudents.map(student => `<tr>
                 <td>${esc(student.admission_no || '—')}</td>
                 <td>${esc(student.roll_no || '—')}</td>
                 <td><strong>${esc(student.student_name || '—')}</strong></td>
@@ -2884,7 +2987,7 @@ function renderFindEventHouseTable(groups) {
             </tbody>
           </table>
         </div>
-        ${group.housePointRows.length ? `<div style="overflow-x:auto;margin-top:12px;">
+        ${orderedHousePointRows.length ? `<div style="overflow-x:auto;margin-top:12px;">
           <table class="data-table">
             <thead>
               <tr>
@@ -2894,7 +2997,7 @@ function renderFindEventHouseTable(groups) {
               </tr>
             </thead>
             <tbody>
-              ${group.housePointRows.map(row => `<tr>
+              ${orderedHousePointRows.map(row => `<tr>
                 <td>${esc(row.place || '—')}</td>
                 <td>${esc(row.houses || '—')}</td>
                 <td>${esc(String(row.award ?? '—'))}</td>
@@ -3050,10 +3153,7 @@ function showDeleteParticipant() {
             <label>House Name</label>
             <select id="deleteHouseSelect">
               <option value="">— Select House —</option>
-              <option value="Ekta House">Ekta House</option>
-              <option value="Sankalp House">Sankalp House</option>
-              <option value="Prayas House">Prayas House</option>
-              <option value="Vishwas House">Vishwas House</option>
+              ${getSortedHouseNames().map(house => `<option value="${esc(house)}">${esc(house)}</option>`).join('')}
             </select>
           </div>
           <div class="form-group">
@@ -3074,7 +3174,7 @@ function renderDeleteParticipantPage() {
   const scope = getDeleteScope();
   const isAdminMode = scope.mode === 'admin';
   const houseOptions = isAdminMode
-    ? `<option value="">All Participants</option><option value="Ekta House">Ekta House</option><option value="Sankalp House">Sankalp House</option><option value="Prayas House">Prayas House</option><option value="Vishwas House">Vishwas House</option>`
+    ? `<option value="">All Participants</option>${getSortedHouseNames().map(house => `<option value="${esc(house)}">${esc(house)}</option>`).join('')}`
     : `<option value="${esc(scope.house)}">${esc(scope.house)}</option>`;
   deleteParticipantRows = [];
   deleteParticipantSelectedKeys = [];
@@ -3086,7 +3186,7 @@ function renderDeleteParticipantPage() {
           <label>Event</label>
           <select id="deleteEventSelect" onchange="loadDeleteParticipants()">
             <option value="">— Select Event —</option>
-            ${allEvents.map(e => `<option value="${e.id}">${esc(e.event_name)}</option>`).join('')}
+            ${sortEventsAscending(allEvents).map(e => `<option value="${e.id}">${esc(formatEventLabel(e))}</option>`).join('')}
           </select>
         </div>
         <div class="form-group">
@@ -3140,7 +3240,7 @@ async function loadDeleteParticipants() {
     : scope.house;
   let rows = [];
   for(const tableName of ['open_participants', 'house_participants']) {
-    const { data, error } = await db.from(tableName).select('id, admission_no, student_name, class, section, house, event_name, registered_by').eq('event_id', eventId);
+    const { data, error } = await db.from(tableName).select('id, admission_no, roll_no, student_name, class, section, house, event_name, registered_by').eq('event_id', eventId);
     if(error) {
       console.error(`load delete participants error from ${tableName}:`, error);
       continue;
@@ -3152,6 +3252,7 @@ async function loadDeleteParticipants() {
   if(houseNorm) {
     rows = rows.filter(row => normalizeText(row.house) === houseNorm || normalizeText(row.registered_by) === houseNorm);
   }
+  rows = sortStudentsAscending(rows);
   deleteParticipantRows = rows;
   if(!rows.length) {
     list.innerHTML = `<div class="empty"><p>No participants found for this selection.</p></div>`;
@@ -3163,7 +3264,7 @@ async function loadDeleteParticipants() {
         <input type="checkbox" onchange="toggleDeleteParticipantSelection('${row.rowKey}')" ${deleteParticipantSelectedKeys.includes(row.rowKey) ? 'checked' : ''}>
         <div>
           <h3>${esc(row.student_name)}</h3>
-          <div class="meta">#${esc(row.admission_no)} · ${esc(row.class)}-${esc(row.section)}</div>
+          <div class="meta">#${esc(row.admission_no)} · Roll ${esc(row.roll_no || row.roll || '—')} · ${esc(row.class)}-${esc(row.section)}</div>
           <div class="meta" style="color:${HOUSE_META[houseKey(row.house)]?.color || 'var(--text)'}">${esc(row.house || row.registered_by || 'Unknown House')}</div>
           <div class="meta">${esc(row.event_name || '')}</div>
         </div>
@@ -3201,7 +3302,7 @@ async function getOpenEventParticipants(eventId) {
   if(!db || !eventId) return [];
   const event = allEvents.find(item => String(item.id) === String(eventId));
   const { data, error } = await db.from('open_participants')
-    .select('admission_no, student_name, class, section, house, event_id, event_name, registered_by')
+    .select('admission_no, roll_no, student_name, class, section, house, event_id, event_name, registered_by')
     .order('student_name', { ascending: true });
   if(error) {
     console.error('getOpenEventParticipants error:', error);
@@ -3233,17 +3334,11 @@ async function getOpenEventParticipants(eventId) {
       house: canonicalHouseName(row.house || row.registered_by || linkedStudent.house)
     });
   });
-  const matchedParticipants = [...deduped.values()]
-    .filter(s => String(s.student_name || '').trim() || String(s.admission_no || '').trim())
-    .sort((a, b) => {
-      const nameA = String(a.student_name || '').trim();
-      const nameB = String(b.student_name || '').trim();
-      return nameA.localeCompare(nameB);
-    });
+  const matchedParticipants = sortStudentsAscending([...deduped.values()]
+    .filter(s => String(s.student_name || '').trim() || String(s.admission_no || '').trim()));
   if(matchedParticipants.length) return matchedParticipants;
-  return [...allStudents]
-    .filter(student => String(student.student_name || '').trim())
-    .sort((a, b) => String(a.student_name || '').localeCompare(String(b.student_name || '')));
+  return sortStudentsAscending([...allStudents]
+    .filter(student => String(student.student_name || '').trim()));
 }
 
 function getOpenResultPlaceLabel(place) {
@@ -3353,19 +3448,23 @@ function renderOpenHouseSummaryTable(entries) {
 
 function renderTempOpenResultTable() {
   const ordered = ['first', 'second', 'third']
-    .flatMap(place => tempOpenResultEntries.filter(entry => entry.place === place));
+    .flatMap(place => tempOpenResultEntries
+      .filter(entry => entry.place === place)
+      .slice()
+      .sort((a, b) => compareStudentsAscending(a.student || {}, b.student || {})));
   return `<div style="overflow-x:auto; margin-top:16px;">
     <table class="data-table">
-      <thead><tr><th>Position</th><th>Admission No</th><th>Name</th><th>Class</th><th>House</th><th>Action</th></tr></thead>
+      <thead><tr><th>Position</th><th>Admission No</th><th>Roll No</th><th>Name</th><th>Class</th><th>House</th><th>Action</th></tr></thead>
       <tbody>
         ${ordered.length ? ordered.map(entry => `<tr>
           <td>${esc(getOpenResultPlaceLabel(entry.place))}</td>
           <td>${esc(entry.student.admission_no || '\u2014')}</td>
+          <td>${esc(entry.student.roll_no || entry.student.roll || '\u2014')}</td>
           <td>${esc(entry.student.student_name)}</td>
           <td>${esc((entry.student.class || '') + (entry.student.section ? '-' + entry.student.section : '') || '\u2014')}</td>
           <td>${esc(entry.student.house || 'No House')}</td>
           <td><button class="btn btn-danger btn-sm" onclick="removeTempOpenResult('${entry.place}','${esc(String(entry.student.admission_no || ''))}')">Remove</button></td>
-        </tr>`).join('') : `<tr><td colspan="6">No open-event result entries added yet.</td></tr>`}
+        </tr>`).join('') : `<tr><td colspan="7">No open-event result entries added yet.</td></tr>`}
       </tbody>
     </table>
   </div>${renderOpenHouseSummaryTable(tempOpenResultEntries)}`;
@@ -3401,6 +3500,7 @@ async function saveOpenParticipantResultDetails(eventId, entries, houseSummary) 
       event_id: eventId,
       event_name: formatEventLabel(event || student.event_name || ''),
       admission_no: admissionNo,
+      roll_no: student.roll_no || student.roll || '',
       student_name: student.student_name || '',
       class: student.class || '',
       section: student.section || '',
@@ -3496,13 +3596,14 @@ function formatOpenPlaceStudents(openResults, place) {
 function renderOpenParticipantMatches(participants, usedAdmissions, query) {
   const q = normalizeText(query);
   const source = Array.isArray(participants) ? participants : [];
-  const matches = !q ? source : source.filter(p => {
+  const matches = (!q ? source : source.filter(p => {
     const admission = normalizeText(p.admission_no);
+    const rollNo = normalizeText(p.roll_no || p.roll);
     const name = normalizeText(p.student_name);
     const classSection = normalizeText(`${p.class || ''} ${p.section || ''}`);
     const house = normalizeText(p.house || p.registered_by);
-    return admission.includes(q) || name.includes(q) || classSection.includes(q) || house.includes(q);
-  });
+    return admission.includes(q) || rollNo.includes(q) || name.includes(q) || classSection.includes(q) || house.includes(q);
+  })).slice().sort(compareStudentsAscending);
   if(!source.length) return `<div class="empty" style="margin-top:16px;"><p>No registered participant found for this open event.</p></div>`;
   if(!matches.length) return `<div class="empty" style="margin-top:16px;"><p>No student found for this search.</p></div>`;
   return `<div class="alert alert-info" style="margin-top:16px;">Showing <strong>${matches.length}</strong> participant${matches.length === 1 ? '' : 's'}${q ? ` for search <strong>${esc(query)}</strong>` : ''}.</div><div class="participant-picker-grid" style="margin-top:16px;">${matches.map((p) => {
@@ -3511,6 +3612,7 @@ function renderOpenParticipantMatches(participants, usedAdmissions, query) {
     return `<div class="participant-picker-card ${disabled ? 'is-disabled' : 'is-clickable'}" ${disabled ? '' : `onclick="selectOpenResultStudent(${originalIndex})"`}>
       <h3>${esc(p.student_name)}</h3>
       <div class="meta">Admission No: ${esc(p.admission_no || '—')}</div>
+      <div class="meta">Roll No: ${esc(p.roll_no || p.roll || '—')}</div>
       <div class="meta">Class: ${esc(p.class || '—')}${p.section ? '-' + esc(p.section) : ''}</div>
       <div class="meta" style="color:${HOUSE_META[houseKey(p.house)]?.color || 'var(--text)'}">${esc(p.house || 'No House')}</div>
       ${disabled ? `<div class="meta">Already added in result</div>` : ``}
@@ -3519,23 +3621,24 @@ function renderOpenParticipantMatches(participants, usedAdmissions, query) {
 }
 
 function renderHouseResultInputs() {
+  const houseOptions = getSortedHouseNames().map(house => `<option>${esc(house)}</option>`).join('');
   return `
     <div class="panel" style="padding:16px; margin-top:16px; background:rgba(255,255,255,0.02); border:1px solid var(--border);">
       <div class="form-group">
         <label>Which house came first?</label>
-        <select id="resFirst"><option value="">- Select House -</option><option>Ekta House</option><option>Sankalp House</option><option>Prayas House</option><option>Vishwas House</option></select>
+        <select id="resFirst"><option value="">- Select House -</option>${houseOptions}</select>
       </div>
       <div class="form-group">
         <label>Which house came second?</label>
-        <select id="resSecond"><option value="">- Select House -</option><option>Ekta House</option><option>Sankalp House</option><option>Prayas House</option><option>Vishwas House</option></select>
+        <select id="resSecond"><option value="">- Select House -</option>${houseOptions}</select>
       </div>
       <div class="form-group">
         <label>Which house came third?</label>
-        <select id="resThird"><option value="">- Select House -</option><option>Ekta House</option><option>Sankalp House</option><option>Prayas House</option><option>Vishwas House</option></select>
+        <select id="resThird"><option value="">- Select House -</option>${houseOptions}</select>
       </div>
       <div class="form-group">
         <label>Which house came fourth?</label>
-        <select id="resFourth"><option value="">- Select House -</option><option>Ekta House</option><option>Sankalp House</option><option>Prayas House</option><option>Vishwas House</option></select>
+        <select id="resFourth"><option value="">- Select House -</option>${houseOptions}</select>
       </div>
       <div class="alert alert-info" style="margin-top:16px;">Points: 1st = 5, 2nd = 3, 3rd = 1, 4th = 0</div>
     </div>`;
@@ -3633,7 +3736,7 @@ function selectOpenResultStudent(index) {
   if(selectedIndex) selectedIndex.value = String(index);
   if(selectedBox) {
     selectedBox.style.display = 'flex';
-    selectedBox.innerHTML = `Selected student: <strong>${esc(student.student_name)}</strong> | Admission No: <strong>${esc(student.admission_no || '—')}</strong> | House: <strong>${esc(student.house || 'No House')}</strong>`;
+    selectedBox.innerHTML = `Selected student: <strong>${esc(student.student_name)}</strong> | Admission No: <strong>${esc(student.admission_no || '—')}</strong> | Roll No: <strong>${esc(student.roll_no || student.roll || '—')}</strong> | House: <strong>${esc(student.house || 'No House')}</strong>`;
   }
 }
 
@@ -4781,7 +4884,8 @@ function renderStudentLookupCard(student = {}) {
 }
 
 function renderStudentLookupTable(students = []) {
-  const hasAnyResult = students.some(student => getStudentDeclaredResult(student));
+  const sortedStudents = sortStudentsAscending(students);
+  const hasAnyResult = sortedStudents.some(student => getStudentDeclaredResult(student));
   return `<table class="events-table">
     <thead>
       <tr>
@@ -4799,7 +4903,7 @@ function renderStudentLookupTable(students = []) {
       </tr>
     </thead>
     <tbody>
-      ${students.map((student, i) => {
+      ${sortedStudents.map((student, i) => {
         const resultText = getStudentDeclaredResult(student);
         return `<tr>
           <td>${i + 1}</td>

@@ -3595,20 +3595,28 @@ function formatOpenPlaceStudents(openResults, place) {
 
 function renderOpenParticipantMatches(participants, usedAdmissions, query) {
   const q = normalizeText(query);
+  const qAdmission = admissionLookupKey(query);
   const source = Array.isArray(participants) ? participants : [];
   const matches = (!q ? source : source.filter(p => {
     const admission = normalizeText(p.admission_no);
+    const admissionKey = admissionLookupKey(p.admission_no);
     const rollNo = normalizeText(p.roll_no || p.roll);
-    const name = normalizeText(p.student_name);
+    const rollKey = admissionLookupKey(p.roll_no || p.roll);
+    const name = normalizeText(p.student_name || p.name);
     const classSection = normalizeText(`${p.class || ''} ${p.section || ''}`);
     const house = normalizeText(p.house || p.registered_by);
-    return admission.includes(q) || rollNo.includes(q) || name.includes(q) || classSection.includes(q) || house.includes(q);
+    return admission.includes(q) ||
+      (qAdmission && (admissionKey.includes(qAdmission) || rollKey.includes(qAdmission))) ||
+      rollNo.includes(q) ||
+      name.includes(q) ||
+      classSection.includes(q) ||
+      house.includes(q);
   })).slice().sort(compareStudentsAscending);
   if(!source.length) return `<div class="empty" style="margin-top:16px;"><p>No registered participant found for this open event.</p></div>`;
   if(!matches.length) return `<div class="empty" style="margin-top:16px;"><p>No student found for this search.</p></div>`;
   return `<div class="alert alert-info" style="margin-top:16px;">Showing <strong>${matches.length}</strong> participant${matches.length === 1 ? '' : 's'}${q ? ` for search <strong>${esc(query)}</strong>` : ''}.</div><div class="participant-picker-grid" style="margin-top:16px;">${matches.map((p) => {
-    const disabled = usedAdmissions.has(String(p.admission_no || ''));
-    const originalIndex = participants.findIndex(item => String(item.admission_no || '') === String(p.admission_no || '') && String(item.student_name || '') === String(p.student_name || ''));
+    const disabled = usedAdmissions.has(admissionLookupKey(p.admission_no));
+    const originalIndex = participants.findIndex(item => admissionLookupKey(item.admission_no) === admissionLookupKey(p.admission_no) && String(item.student_name || item.name || '') === String(p.student_name || p.name || ''));
     return `<div class="participant-picker-card ${disabled ? 'is-disabled' : 'is-clickable'}" ${disabled ? '' : `onclick="selectOpenResultStudent(${originalIndex})"`}>
       <h3>${esc(p.student_name)}</h3>
       <div class="meta">Admission No: ${esc(p.admission_no || '—')}</div>
@@ -3674,7 +3682,9 @@ async function onAddResultEventChange() {
     tempOpenResultEventId = event.id;
   }
   box.innerHTML = `<div class="alert alert-info">Loading students for ${esc(formatEventLabel(event))}...</div>`;
-  const participants = await getOpenEventParticipants(event.id);
+  const participants = sortStudentsAscending((allStudents || []).filter(student =>
+    String(student.student_name || '').trim() || String(student.admission_no || '').trim()
+  ));
   currentOpenEventParticipants = participants;
   const existing = allResults.find(r => parseInt(r.event_id, 10) === event.id && r.event_type === 'open');
   let noteData = null;
@@ -3685,13 +3695,14 @@ async function onAddResultEventChange() {
       .flatMap(place => (Array.isArray(openResults[place]) ? openResults[place] : (openResults[place] ? [openResults[place]] : []))
         .map(student => ({ place, student })));
   }
-  const usedAdmissions = new Set(tempOpenResultEntries.map(entry => String(entry.student?.admission_no || '')).filter(Boolean));
+  const usedAdmissions = new Set(tempOpenResultEntries.map(entry => admissionLookupKey(entry.student?.admission_no)).filter(Boolean));
   box.innerHTML = `
-    <div class="alert alert-info">Open event result is student-wise. All registered participants appear below automatically. Search by admission number or student name to filter the list, then choose First, Second, or Third and add to the temporary table. ${participants.length ? `Registered participants loaded: <strong>${participants.length}</strong>.` : 'No registered participants were found for this event yet.'}</div>
+    <div class="alert alert-info">Open event result is student-wise. All students from all houses appear below automatically. Search by admission number or student name to filter the list, then choose First, Second, or Third and add to the temporary table. ${participants.length ? `Students loaded: <strong>${participants.length}</strong>.` : 'No student records were found yet.'}</div>
     <div class="form-grid">
       <div class="form-group">
         <label>Search Student</label>
-        <input type="text" id="resOpenStudentSearch" placeholder="Type admission number or student name">
+        <input type="text" id="resOpenStudentSearch" placeholder="Type admission number or student name" oninput="renderOpenResultStudentList()" onkeyup="renderOpenResultStudentList()" onchange="renderOpenResultStudentList()">
+        <div class="meta" style="margin-top:6px;">Live filter active. You can search by name, admission no, or roll no.</div>
       </div>
       <div class="form-group">
         <label>Result</label>
@@ -3713,19 +3724,20 @@ async function onAddResultEventChange() {
     <input type="hidden" id="resOpenSelectedIndex" value="">
   `;
   const searchInput = document.getElementById('resOpenStudentSearch');
-  if(searchInput) {
-    searchInput.addEventListener('input', renderOpenResultStudentList);
-    renderOpenResultStudentList();
-  }
+  if(searchInput) renderOpenResultStudentList();
 }
 
 function renderOpenResultStudentList() {
   const data = Array.isArray(currentOpenEventParticipants) ? currentOpenEventParticipants : [];
   const query = document.getElementById('resOpenStudentSearch')?.value || '';
-  const usedAdmissions = new Set(tempOpenResultEntries.map(entry => String(entry.student?.admission_no || '')).filter(Boolean));
+  const usedAdmissions = new Set(tempOpenResultEntries.map(entry => admissionLookupKey(entry.student?.admission_no)).filter(Boolean));
   const matchesBox = document.getElementById('resOpenStudentMatches');
-  if(matchesBox) matchesBox.innerHTML = renderOpenParticipantMatches(data, usedAdmissions, query);
+  if(matchesBox) {
+    matchesBox.setAttribute('data-last-query', query);
+    matchesBox.innerHTML = renderOpenParticipantMatches(data, usedAdmissions, query);
+  }
 }
+if(typeof window !== 'undefined') window.renderOpenResultStudentList = renderOpenResultStudentList;
 
 function selectOpenResultStudent(index) {
   const data = Array.isArray(currentOpenEventParticipants) ? currentOpenEventParticipants : [];
@@ -3739,6 +3751,7 @@ function selectOpenResultStudent(index) {
     selectedBox.innerHTML = `Selected student: <strong>${esc(student.student_name)}</strong> | Admission No: <strong>${esc(student.admission_no || '—')}</strong> | Roll No: <strong>${esc(student.roll_no || student.roll || '—')}</strong> | House: <strong>${esc(student.house || 'No House')}</strong>`;
   }
 }
+if(typeof window !== 'undefined') window.selectOpenResultStudent = selectOpenResultStudent;
 
 function resetOpenResultSelection() {
   const selectedIndex = document.getElementById('resOpenSelectedIndex');
@@ -3756,6 +3769,7 @@ function resetOpenResultSelection() {
   }
   if(place) place.value = '';
 }
+if(typeof window !== 'undefined') window.resetOpenResultSelection = resetOpenResultSelection;
 
 function removeTempOpenResult(place, admissionNo) {
   let removed = false;
@@ -3777,7 +3791,7 @@ function addOpenResultTempEntry() {
   const participantsData = Array.isArray(currentOpenEventParticipants) ? currentOpenEventParticipants : [];
   const student = participantsData[parseInt(selectedIndex, 10)];
   if(!student) { showToast('Selected student could not be found', 'error'); return; }
-  if(tempOpenResultEntries.some(entry => String(entry.student?.admission_no || '') === String(student.admission_no || ''))) { showToast('This student is already added', 'error'); return; }
+  if(tempOpenResultEntries.some(entry => admissionLookupKey(entry.student?.admission_no) === admissionLookupKey(student.admission_no))) { showToast('This student is already added', 'error'); return; }
   tempOpenResultEntries.push({ place, student });
   const tempTable = document.getElementById('resOpenTempTable');
   if(tempTable) tempTable.innerHTML = renderTempOpenResultTable();
@@ -3790,7 +3804,7 @@ function addOpenResultTempEntry() {
 function showAddResult() {
   const resultEvents = allEvents.filter(e => e.open !== 'suspended');
   document.getElementById('page-addResultAdmin').innerHTML = `
-    <div class="page-header"><h1>Add Result</h1><p>Admin-only result entry for passed and upcoming event tracking.</p><div class="meta" style="margin-top:8px; color:var(--gold); font-weight:700;">Build: 06-Apr-2026 01:05 PM</div></div>
+    <div class="page-header"><h1>Add Result</h1><p>Admin-only result entry for passed and upcoming event tracking.</p><div class="meta" style="margin-top:8px; color:var(--gold); font-weight:700;">Build: 15-Apr-2026 10:20 AM</div></div>
     <div class="panel">
       <div class="form-grid">
         <div class="form-group">

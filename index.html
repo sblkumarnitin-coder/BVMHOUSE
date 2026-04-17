@@ -1092,6 +1092,7 @@
         <div class="nav-sub-item" onclick="showResultsPositionWise()">Position Wise</div>
         <div class="nav-sub-item" onclick="showResultsPointsWise()">Points Wise</div>
         <div class="nav-sub-item" onclick="showResultByEvent()">Result of an Event</div>
+        <div class="nav-sub-item" onclick="showCertificateCenter()">E-Certificates</div>
       </div>
       <div class="nav-item" onclick="toggleNav('findNav',this)">
         <span class="icon">◌</span> Find Student
@@ -1385,6 +1386,7 @@ const AUTH_NAME_COLUMN = 'username';
 const AUTH_HOUSE_COLUMN = 'house_name';
 const AUTH_PASSWORD_COLUMN = 'password';
 const HOUSE_BANNER_IMG = 'file:///C:/Users/sblku/OneDrive/Desktop/inter%20house%20web%20page/logo%20of%20house.jpeg';
+const CERTIFICATE_TEMPLATE_IMG = 'file:///C:/Users/sblku/Downloads/Copilot_20260416_122448.png';
 const HOUSE_META = {
   ekta: { name: 'Ekta House', color: '#20bf55', cls: 'ekta', img: 'https://ik.imagekit.io/flr6iuzhm/ekta.jpg?updatedAt=1755956346875', logoPosition: 'center' },
   sankalp: { name: 'Sankalp House', color: '#e11d2f', cls: 'sankalp', img: 'https://ik.imagekit.io/flr6iuzhm/sankalp.jpg?updatedAt=1755956347311', logoPosition: 'center' },
@@ -1413,6 +1415,8 @@ let tempOpenResultEntries = [];
 let tempOpenResultEventId = null;
 let isSavingResult = false;
 let currentOpenEventParticipants = [];
+let currentCertificateEntries = [];
+let certificateTemplateCache = null;
 
 function defaultHousePoints() {
   return {
@@ -1606,6 +1610,53 @@ function getRowValue(row = {}, keys = []) {
     if(row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== '') return row[key];
   }
   return '';
+}
+function formatCertificateDate(value) {
+  const dt = value ? new Date(value) : new Date();
+  if(Number.isNaN(dt.getTime())) return String(value || '').trim();
+  return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+}
+function sanitizeFilename(value) {
+  return String(value || 'certificate').replace(/[<>:"/\\|?*\u0000-\u001F]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function drawCenteredCanvasText(ctx, text, x, y, maxWidth, font, color = '#2f2a28') {
+  if(!text) return;
+  ctx.save();
+  ctx.font = font;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  let fontSizeMatch = font.match(/(\d+)px/);
+  let size = fontSizeMatch ? parseInt(fontSizeMatch[1], 10) : 24;
+  while(size > 12 && ctx.measureText(text).width > maxWidth) {
+    size -= 1;
+    ctx.font = font.replace(/\d+px/, `${size}px`);
+  }
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+function drawWrappedCanvasText(ctx, text, x, y, maxWidth, lineHeight, font, color = '#2f2a28') {
+  if(!text) return;
+  ctx.save();
+  ctx.font = font;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const words = String(text).split(/\s+/).filter(Boolean);
+  const lines = [];
+  let current = '';
+  words.forEach(word => {
+    const candidate = current ? `${current} ${word}` : word;
+    if(ctx.measureText(candidate).width <= maxWidth || !current) current = candidate;
+    else {
+      lines.push(current);
+      current = word;
+    }
+  });
+  if(current) lines.push(current);
+  const startY = y - ((lines.length - 1) * lineHeight) / 2;
+  lines.forEach((line, index) => ctx.fillText(line, x, startY + index * lineHeight));
+  ctx.restore();
 }
 function formatEventLabel(eventOrName, forClass = '') {
   if(eventOrName && typeof eventOrName === 'object') {
@@ -2402,7 +2453,6 @@ async function registerParticipants() {
     if(existingAdmissions.includes(admissionLookupKey(s.admission_no))) continue;
     const { error } = await db.from(table).insert([{
       admission_no: s.admission_no,
-      roll_no: s.roll_no || s.roll || '',
       student_name: s.student_name,
       class: s.class,
       section: s.section,
@@ -3240,12 +3290,15 @@ async function loadDeleteParticipants() {
     : scope.house;
   let rows = [];
   for(const tableName of ['open_participants', 'house_participants']) {
-    const { data, error } = await db.from(tableName).select('id, admission_no, roll_no, student_name, class, section, house, event_name, registered_by').eq('event_id', eventId);
+    const { data, error } = await db.from(tableName).select('id, admission_no, student_name, class, section, house, event_name, registered_by').eq('event_id', eventId);
     if(error) {
       console.error(`load delete participants error from ${tableName}:`, error);
       continue;
     }
-    const mapped = (data || []).map(row => ({ ...row, tableName, rowKey: `${tableName}:${row.id}` }));
+    const mapped = (data || []).map(row => {
+      const linkedStudent = allStudents.find(student => admissionLookupKey(student.admission_no) === admissionLookupKey(row.admission_no)) || {};
+      return { ...linkedStudent, ...row, tableName, rowKey: `${tableName}:${row.id}` };
+    });
     rows = rows.concat(mapped);
   }
   const houseNorm = normalizeText(requestedHouse);
@@ -3302,7 +3355,7 @@ async function getOpenEventParticipants(eventId) {
   if(!db || !eventId) return [];
   const event = allEvents.find(item => String(item.id) === String(eventId));
   const { data, error } = await db.from('open_participants')
-    .select('admission_no, roll_no, student_name, class, section, house, event_id, event_name, registered_by')
+    .select('admission_no, student_name, class, section, house, event_id, event_name, registered_by')
     .order('student_name', { ascending: true });
   if(error) {
     console.error('getOpenEventParticipants error:', error);
@@ -3500,7 +3553,6 @@ async function saveOpenParticipantResultDetails(eventId, entries, houseSummary) 
       event_id: eventId,
       event_name: formatEventLabel(event || student.event_name || ''),
       admission_no: admissionNo,
-      roll_no: student.roll_no || student.roll || '',
       student_name: student.student_name || '',
       class: student.class || '',
       section: student.section || '',
@@ -4671,6 +4723,276 @@ async function loadSingleEventResult(eventId) {
   <div class="result-confetti-layer" id="resultConfettiLayer"></div>`;
 
   runSingleEventReveal(result, noteData, selectedEventLabel || formatEventLabel(event));
+}
+
+async function loadCertificateTemplateImage() {
+  if(certificateTemplateCache) return certificateTemplateCache;
+  certificateTemplateCache = await (async () => {
+    const response = await fetch(CERTIFICATE_TEMPLATE_IMG);
+    if(!response.ok) throw new Error('Certificate template image could not be loaded.');
+    const blob = await response.blob();
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Certificate template image could not be read.'));
+      reader.readAsDataURL(blob);
+    });
+    return await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Certificate template image could not be loaded.'));
+      img.src = dataUrl;
+    });
+  })();
+  return certificateTemplateCache;
+}
+
+async function loadCertificateEntries(eventId = '') {
+  if(!db) return [];
+  const requestedEventId = String(eventId || '').trim();
+  const deduped = new Map();
+  let results = allResults || [];
+  if(!results.length) {
+    try {
+      results = await loadResults();
+    } catch(e) {
+      console.error('loadCertificateEntries loadResults error:', e);
+      results = [];
+    }
+  }
+  const targetResults = results.filter(result => {
+    if(requestedEventId && String(result.event_id || '') !== requestedEventId) return false;
+    if(String(result.event_type || '').trim() === 'open') return true;
+    return !!(result.first_place || result.second_place || result.third_place);
+  });
+  const addCertificateEntry = (baseRow, resultRow, placeLabel) => {
+    const admission = admissionLookupKey(baseRow.admission_no);
+    const linkedStudent = allStudents.find(student => admissionLookupKey(student.admission_no) === admission) || {};
+    const event = allEvents.find(item => String(item.id) === String(resultRow.event_id || baseRow.event_id || ''));
+    const key = `${String(resultRow.event_id || baseRow.event_id || '')}:${admission || String(baseRow.student_name || '')}:${placeLabel}`;
+    if(deduped.has(key)) return;
+    deduped.set(key, {
+      ...linkedStudent,
+      ...baseRow,
+      event_id: resultRow.event_id || baseRow.event_id || '',
+      event_name: baseRow.event_name || resultRow.event_name || '',
+      event_label: event ? formatEventLabel(event) : (resultRow.event_name || baseRow.event_name || ''),
+      event_date: event?.event_date || '',
+      house: canonicalHouseName(baseRow.house || linkedStudent.house || ''),
+      roll_no: baseRow.roll_no || linkedStudent.roll_no || linkedStudent.roll || '',
+      result_place: placeLabel
+    });
+  };
+
+  for(const resultRow of targetResults) {
+    const resultEventId = String(resultRow.event_id || '').trim();
+    const event = allEvents.find(item => String(item.id) === resultEventId);
+    let noteData = null;
+    try { noteData = resultRow?.notes ? JSON.parse(resultRow.notes) : null; } catch {}
+
+    if(String(resultRow.event_type || '').trim() === 'open') {
+      const normalized = normalizeOpenResults(noteData?.open_results || {});
+      ['first', 'second', 'third'].forEach(placeKey => {
+        const placeLabel = `${placeKey.charAt(0).toUpperCase() + placeKey.slice(1)} Place`;
+        normalized[placeKey].forEach(student => addCertificateEntry({
+          ...student,
+          event_id: resultEventId,
+          event_name: resultRow.event_name || event?.event_name || ''
+        }, resultRow, placeLabel));
+      });
+      continue;
+    }
+
+    const placePlans = [
+      { house: resultRow.first_place, place: 'First Place' },
+      { house: resultRow.second_place, place: 'Second Place' },
+      { house: resultRow.third_place, place: 'Third Place' }
+    ].filter(item => item.house);
+
+    if(!placePlans.length) continue;
+
+    const { data: houseRows, error: houseRowsError } = await db.from('house_participants')
+      .select('id, admission_no, student_name, class, section, house, event_id, event_name')
+      .eq('event_id', resultEventId);
+    if(houseRowsError) {
+      console.error('loadCertificateEntries house participants error:', houseRowsError);
+      continue;
+    }
+    placePlans.forEach(plan => {
+      (houseRows || [])
+        .filter(row => canonicalHouseName(row.house) === canonicalHouseName(plan.house))
+        .forEach(row => addCertificateEntry(row, resultRow, plan.place));
+    });
+  }
+
+  return [...deduped.values()].sort((a, b) =>
+    compareAscending(a.event_label, b.event_label) ||
+    getResultPlaceRank(a.result_place) - getResultPlaceRank(b.result_place) ||
+    compareStudentsAscending(a, b)
+  );
+}
+
+function buildCertificateHtml(entry) {
+  const studentName = String(entry.student_name || entry.name || '').trim().toUpperCase() || 'STUDENT NAME';
+  const classText = String(entry.class || '—').trim();
+  const sectionText = String(entry.section || '—').trim();
+  const houseText = String(entry.house || '—').trim();
+  const eventText = String(entry.event_label || entry.event_name || 'Inter-House Event').trim();
+  const rankText = String(entry.result_place || '').replace(' Place', '').trim() || 'Position';
+  const awardDate = formatCertificateDate(entry.event_date || new Date());
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>${esc(studentName)} Certificate</title>
+<style>
+  body { margin:0; background:#f4efe8; font-family: Georgia, serif; }
+  .sheet { width:794px; margin:20px auto; position:relative; }
+  .sheet img { width:100%; display:block; }
+  .text { position:absolute; color:#2f2a28; }
+  .name { top:45.1%; left:50%; transform:translateX(-50%); width:56%; text-align:center; font-size:24px; font-weight:700; letter-spacing:0.4px; }
+  .class { top:55.9%; left:33.3%; width:13%; text-align:center; font-size:14px; font-weight:600; }
+  .section { top:55.9%; left:55.8%; width:17%; text-align:center; font-size:14px; font-weight:600; }
+  .house { top:55.9%; left:77.8%; width:25%; text-align:center; font-size:14px; font-weight:600; }
+  .event { top:61.0%; left:64.2%; width:42%; text-align:center; font-size:13px; font-weight:600; line-height:1.15; }
+  .rank { top:67.4%; left:63.8%; width:15%; text-align:center; font-size:14px; font-weight:600; }
+  .date { top:79.1%; left:85.4%; width:18%; text-align:center; font-size:13px; font-weight:600; }
+  @media print {
+    body { background:white; }
+    .sheet { margin:0 auto; }
+  }
+</style>
+</head>
+<body>
+  <div class="sheet">
+    <img src="${CERTIFICATE_TEMPLATE_IMG}" alt="Certificate Template">
+    <div class="text name">${esc(studentName)}</div>
+    <div class="text class">${esc(classText)}</div>
+    <div class="text section">${esc(sectionText)}</div>
+    <div class="text house">${esc(houseText)}</div>
+    <div class="text event">${esc(eventText)}</div>
+    <div class="text rank">${esc(rankText)}</div>
+    <div class="text date">${esc(awardDate)}</div>
+  </div>
+</body>
+</html>`;
+}
+
+async function downloadCertificate(entry) {
+  try {
+    const win = window.open('', '_blank', 'width=900,height=1100');
+    if(!win) {
+      showToast('Pop-up blocked. Please allow pop-ups to open the certificate.', 'error');
+      return;
+    }
+    win.document.open();
+    win.document.write(buildCertificateHtml(entry));
+    win.document.close();
+    win.focus();
+    setTimeout(() => {
+      try { win.print(); } catch {}
+    }, 500);
+  } catch(e) {
+    console.error('downloadCertificate error:', e);
+    showToast(e.message || 'Could not open certificate.', 'error');
+  }
+}
+
+async function downloadCertificateByIndex(index) {
+  const entry = currentCertificateEntries[index];
+  if(!entry) return;
+  await downloadCertificate(entry);
+}
+
+async function downloadAllCertificates() {
+  if(!currentCertificateEntries.length) { showToast('No certificate entries available.', 'warning'); return; }
+  for(const entry of currentCertificateEntries) {
+    await downloadCertificate(entry);
+    await new Promise(resolve => setTimeout(resolve, 400));
+  }
+}
+
+async function renderCertificateEntries() {
+  const eventId = document.getElementById('certificateEventSelect')?.value || '';
+  const area = document.getElementById('certificateResults');
+  if(!area) return;
+  area.innerHTML = `<div class="empty"><p>Loading certificate entries...</p></div>`;
+  currentCertificateEntries = await loadCertificateEntries(eventId);
+  if(!currentCertificateEntries.length) {
+    area.innerHTML = `<div class="empty"><p>No first, second, or third place participants found for this selection.</p></div>`;
+    return;
+  }
+  area.innerHTML = `
+    <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
+      <button class="btn btn-primary" onclick="downloadAllCertificates()">Open All Certificates</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="events-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Event</th>
+            <th>Position</th>
+            <th>Student</th>
+            <th>Admission No</th>
+            <th>Class</th>
+            <th>House</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${currentCertificateEntries.map((entry, index) => `<tr>
+            <td>${index + 1}</td>
+            <td><strong>${esc(entry.event_label || entry.event_name || '—')}</strong></td>
+            <td>${esc(entry.result_place || '—')}</td>
+            <td>${esc(entry.student_name || '—')}</td>
+            <td>${esc(entry.admission_no || '—')}</td>
+            <td>${esc([entry.class, entry.section].filter(Boolean).join('-') || '—')}</td>
+            <td style="color:${HOUSE_META[houseKey(entry.house)]?.color || 'var(--text)'}">${esc(entry.house || '—')}</td>
+            <td><button class="btn btn-success btn-sm" onclick="downloadCertificateByIndex(${index})">Open</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function showCertificateCenter() {
+  const dynPage = document.getElementById('page-dynamic');
+  try {
+    await loadResults();
+  } catch(e) {
+    console.error('showCertificateCenter loadResults error:', e);
+  }
+  const certificateEvents = [...new Map((allResults || [])
+    .filter(result => String(result.event_id || '').trim())
+    .map(result => {
+      const linkedEvent = allEvents.find(event => String(event.id) === String(result.event_id || ''));
+      const label = linkedEvent ? formatEventLabel(linkedEvent) : getStoredEventLabel(result);
+      return [String(result.event_id), { id: String(result.event_id), label }];
+    }))
+    .values()].sort((a, b) => compareAscending(a.label, b.label));
+  dynPage.innerHTML = `
+    <div class="page-header">
+      <h1>E-Certificates</h1>
+      <p>Generate certificates for first, second, and third position participants using your provided certificate template.</p>
+    </div>
+    <div class="panel">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Select Event</label>
+          <select id="certificateEventSelect" onchange="renderCertificateEntries()">
+            <option value="">— All Events —</option>
+            ${certificateEvents.map(event => `<option value="${event.id}">${esc(event.label)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="alert alert-info" style="margin-top:12px;">Certificates open in a print-ready window using your template. From there you can print or save as PDF.</div>
+      <div id="certificateResults" style="margin-top:16px;"></div>
+    </div>
+    <button class="btn btn-secondary" style="margin-top:16px" onclick="showPage('dashboard','Dashboard')">← Back</button>`;
+  showPage('dynamic', 'E-Certificates');
+  renderCertificateEntries();
 }
 
 // ════════════════════════════════════════════════════════════════

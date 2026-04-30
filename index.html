@@ -1132,7 +1132,7 @@
             <button class="switcher-btn" id="viewListBtn" onclick="setViewMode('list')">List</button>
           </div>
         </div>
-        <span class="topbar-badge" id="topbarSessionBadge">2025-26</span>
+<span class="topbar-badge" id="topbarSessionBadge">2026-27</span>
       </div>
     </div>
 
@@ -1410,7 +1410,8 @@ let allResults = [];
 let completedEventIds = new Set();
 let currentTheme = 'dark';
 let currentViewMode = 'icon';
-let currentSessionLabel = localStorage.getItem('bvm_session_label') || '2025-26';
+let currentSessionLabel = localStorage.getItem('bvm_session_label') || '2026-27';
+if(currentSessionLabel === '2025-26') currentSessionLabel = '2026-27';
 let tempOpenResultEntries = [];
 let tempOpenResultEventId = null;
 let isSavingResult = false;
@@ -1488,10 +1489,10 @@ function refreshHousePoints() {
     const secondPts = Number(points.second_place ?? 3) || 3;
     const thirdPts = Number(points.third_place ?? 1) || 1;
     const fourthPts = Number(points.fourth_place ?? 0) || 0;
-    if(totals[result.first_place] !== undefined) totals[result.first_place] += firstPts;
-    if(totals[result.second_place] !== undefined) totals[result.second_place] += secondPts;
-    if(totals[result.third_place] !== undefined) totals[result.third_place] += thirdPts;
-    if(totals[result.fourth_place] !== undefined) totals[result.fourth_place] += fourthPts;
+    parseHousePositionValue(result.first_place).forEach(house => { if(totals[house] !== undefined) totals[house] += firstPts; });
+    parseHousePositionValue(result.second_place).forEach(house => { if(totals[house] !== undefined) totals[house] += secondPts; });
+    parseHousePositionValue(result.third_place).forEach(house => { if(totals[house] !== undefined) totals[house] += thirdPts; });
+    parseHousePositionValue(result.fourth_place).forEach(house => { if(totals[house] !== undefined) totals[house] += fourthPts; });
   });
   housePts = totals;
 }
@@ -1526,7 +1527,7 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 function applySessionLabel(label) {
-  currentSessionLabel = label || '2025-26';
+  currentSessionLabel = label || '2026-27';
   localStorage.setItem('bvm_session_label', currentSessionLabel);
   const pill = document.getElementById('sessionPill');
   if(pill) pill.textContent = `SESSION ${currentSessionLabel.replace('-', ' – ')}`;
@@ -1611,6 +1612,59 @@ function getRowValue(row = {}, keys = []) {
   }
   return '';
 }
+function parseHousePositionValue(value) {
+  const seen = new Set();
+  return String(value || '')
+    .split(',')
+    .map(item => canonicalHouseName(item.trim()))
+    .filter(Boolean)
+    .filter(item => {
+      if(seen.has(item)) return false;
+      seen.add(item);
+      return true;
+    });
+}
+function joinHousePositionValue(value) {
+  return parseHousePositionValue(value).join(', ');
+}
+function expandHouseShortcutToken(token) {
+  const raw = String(token || '').trim();
+  if(!raw) return '';
+  const key = raw.toLowerCase();
+  if(key === 'e') return 'Ekta House';
+  if(key === 's') return 'Sankalp House';
+  if(key === 'p') return 'Prayas House';
+  if(key === 'v') return 'Vishwas House';
+  return canonicalHouseName(raw) || raw;
+}
+function expandHouseShortcutInput(value) {
+  const raw = String(value || '');
+  const endsWithComma = /,\s*$/.test(raw);
+  const parts = raw.split(',');
+  const expandedParts = parts.map((part, index) => {
+    const isLast = index === parts.length - 1;
+    const trimmed = part.trim();
+    if(!trimmed) return '';
+    if(isLast && !endsWithComma) {
+      const shortcut = trimmed.toLowerCase();
+      if(['e', 's', 'p', 'v'].includes(shortcut)) return expandHouseShortcutToken(trimmed);
+      return part.replace(/^\s+/, '');
+    }
+    return expandHouseShortcutToken(trimmed);
+  });
+  let result = expandedParts
+    .map((part, index) => part ? (index === 0 ? part : ` ${part}`) : '')
+    .join(',');
+  if(endsWithComma) result = result.replace(/\s*$/, '') + ', ';
+  return result;
+}
+function applyHouseShortcutInput(inputId) {
+  const input = document.getElementById(inputId);
+  if(!input) return;
+  const expanded = expandHouseShortcutInput(input.value);
+  if(input.value !== expanded) input.value = expanded;
+}
+if(typeof window !== 'undefined') window.applyHouseShortcutInput = applyHouseShortcutInput;
 function formatCertificateDate(value) {
   const dt = value ? new Date(value) : new Date();
   if(Number.isNaN(dt.getTime())) return String(value || '').trim();
@@ -3608,9 +3662,9 @@ async function saveHouseParticipantResultDetails(eventId, placements, pointsMap)
     { house: placements.third_place, result_place: 'Third Place' },
     { house: placements.fourth_place, result_place: 'Fourth Place' }
   ].filter(item => item.house);
-  const updates = plan.map(item => db.from('house_participants').update({
+  const updates = plan.flatMap(item => parseHousePositionValue(item.house).map(house => db.from('house_participants').update({
     result_place: item.result_place
-  }).eq('event_id', eventId).ilike('house', item.house));
+  }).eq('event_id', eventId).ilike('house', house)));
   const results = await Promise.all(updates);
   const placementError = results.find(result => result?.error)?.error || null;
   if(placementError && !firstError) firstError = placementError;
@@ -3681,26 +3735,26 @@ function renderOpenParticipantMatches(participants, usedAdmissions, query) {
 }
 
 function renderHouseResultInputs() {
-  const houseOptions = getSortedHouseNames().map(house => `<option>${esc(house)}</option>`).join('');
+  const houseList = getSortedHouseNames().join(', ');
   return `
     <div class="panel" style="padding:16px; margin-top:16px; background:rgba(255,255,255,0.02); border:1px solid var(--border);">
       <div class="form-group">
-        <label>Which house came first?</label>
-        <select id="resFirst"><option value="">- Select House -</option>${houseOptions}</select>
+        <label>First Place House(s)</label>
+        <input type="text" id="resFirst" placeholder="Example: Ekta House, Sankalp House" oninput="applyHouseShortcutInput('resFirst')" onblur="applyHouseShortcutInput('resFirst')">
       </div>
       <div class="form-group">
-        <label>Which house came second?</label>
-        <select id="resSecond"><option value="">- Select House -</option>${houseOptions}</select>
+        <label>Second Place House(s)</label>
+        <input type="text" id="resSecond" placeholder="Leave blank if this place is skipped due to a tie" oninput="applyHouseShortcutInput('resSecond')" onblur="applyHouseShortcutInput('resSecond')">
       </div>
       <div class="form-group">
-        <label>Which house came third?</label>
-        <select id="resThird"><option value="">- Select House -</option>${houseOptions}</select>
+        <label>Third Place House(s)</label>
+        <input type="text" id="resThird" placeholder="Example: Prayas House" oninput="applyHouseShortcutInput('resThird')" onblur="applyHouseShortcutInput('resThird')">
       </div>
       <div class="form-group">
-        <label>Which house came fourth?</label>
-        <select id="resFourth"><option value="">- Select House -</option>${houseOptions}</select>
+        <label>Fourth Place House(s)</label>
+        <input type="text" id="resFourth" placeholder="Example: Vishwas House" oninput="applyHouseShortcutInput('resFourth')" onblur="applyHouseShortcutInput('resFourth')">
       </div>
-      <div class="alert alert-info" style="margin-top:16px;">Points: 1st = 5, 2nd = 3, 3rd = 1, 4th = 0</div>
+      <div class="alert alert-info" style="margin-top:16px;">Points: 1st = 5, 2nd = 3, 3rd = 1, 4th = 0. For a tie, type multiple houses separated by commas. Example houses: ${esc(houseList)}.</div>
     </div>`;
 }
 
@@ -3951,12 +4005,19 @@ async function doAddResult() {
     }
 
     if(hasResultForEvent(event.id)) { showToast('Result already saved for this event', 'error'); return; }
-    const first = document.getElementById('resFirst')?.value;
-    const second = document.getElementById('resSecond')?.value;
-    const third = document.getElementById('resThird')?.value;
-    const fourth = document.getElementById('resFourth')?.value;
-    if(!first || !second || !third || !fourth) { showToast('Select all four house positions', 'error'); return; }
-    if(new Set([first, second, third, fourth]).size !== 4) { showToast('Each house can be used only one time', 'error'); return; }
+    const first = joinHousePositionValue(document.getElementById('resFirst')?.value);
+    const second = joinHousePositionValue(document.getElementById('resSecond')?.value);
+    const third = joinHousePositionValue(document.getElementById('resThird')?.value);
+    const fourth = joinHousePositionValue(document.getElementById('resFourth')?.value);
+    const usedHouses = [
+      ...parseHousePositionValue(first),
+      ...parseHousePositionValue(second),
+      ...parseHousePositionValue(third),
+      ...parseHousePositionValue(fourth)
+    ];
+    if(!first) { showToast('Enter at least one first place house', 'error'); return; }
+    if(new Set(usedHouses).size !== usedHouses.length) { showToast('A house can appear in only one position.', 'error'); return; }
+    if(new Set(usedHouses).size !== HOUSE_ORDER.length) { showToast('Assign all four houses across the result positions.', 'error'); return; }
     const points = { first_place: 5, second_place: 3, third_place: 1, fourth_place: 0 };
     const payload = {
       event_id: event.id,
@@ -4027,8 +4088,8 @@ const PLACE_POINTS = { first_place: 5, second_place: 3, third_place: 1, fourth_p
 function getHousePlaceInResult(result, houseName) {
   // For house events: look at first_place / second_place / third_place / fourth_place
   for(const [key, label] of Object.entries(PLACE_LABELS)) {
-    const val = (result[key] || '').trim().toLowerCase();
-    if(val === houseName.trim().toLowerCase()) return label;
+    const houses = parseHousePositionValue(result[key]).map(item => item.toLowerCase());
+    if(houses.includes(houseName.trim().toLowerCase())) return label;
   }
   // For open events: look inside placement_rows in notes
   try {
@@ -4053,7 +4114,7 @@ function getHousePointsInResult(result, houseName) {
     // House event — map place to points
     const pts = nd?.points || PLACE_POINTS;
     for(const key of Object.keys(PLACE_LABELS)) {
-      if((result[key]||'').trim().toLowerCase() === houseName.trim().toLowerCase()) {
+      if(parseHousePositionValue(result[key]).map(item => item.toLowerCase()).includes(houseName.trim().toLowerCase())) {
         return pts[key] ?? PLACE_POINTS[key] ?? '—';
       }
     }
@@ -4408,7 +4469,7 @@ async function showResultsPositionWise() {
 
   const tableHtml = `
   <div id="pos-wise-area">
-    ${resultReportHeader('Result of Inter-House Events — Session 2025–26')}
+    ${resultReportHeader(`Result of Inter-House Events — Session ${currentSessionLabel}`)}
     <div style="overflow-x:auto;">
     <table style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead>
@@ -4481,7 +4542,7 @@ async function showResultsPointsWise() {
 
   const tableHtml = `
   <div id="pts-wise-area">
-    ${resultReportHeader('Result of Inter-House Events — Session 2025–26')}
+    ${resultReportHeader(`Result of Inter-House Events — Session ${currentSessionLabel}`)}
     <div style="overflow-x:auto;">
     <table style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead>
@@ -4676,7 +4737,7 @@ async function loadSingleEventResult(eventId) {
 
   area.innerHTML = `
   <div class="panel" id="single-event-print-area">
-    ${resultReportHeader('Result of Inter-House Events — Session 2025–26')}
+    ${resultReportHeader(`Result of Inter-House Events — Session ${currentSessionLabel}`)}
     <div style="text-align:center; margin-bottom:20px;">
       <div style="font-family:'Cinzel',serif;font-size:18px;font-weight:700;color:var(--text);">${esc(formatEventLabel(event))}</div>
       <div style="margin-top:8px;display:flex;justify-content:center;gap:16px;flex-wrap:wrap;">
@@ -4819,8 +4880,9 @@ async function loadCertificateEntries(eventId = '') {
       continue;
     }
     placePlans.forEach(plan => {
+      const tiedHouses = parseHousePositionValue(plan.house);
       (houseRows || [])
-        .filter(row => canonicalHouseName(row.house) === canonicalHouseName(plan.house))
+        .filter(row => tiedHouses.includes(canonicalHouseName(row.house)))
         .forEach(row => addCertificateEntry(row, resultRow, plan.place));
     });
   }
@@ -5015,7 +5077,7 @@ if(window.speechSynthesis) {
 
 function getBVMSystemPrompt() {
   const pts = Object.entries(housePts||{}).map(([h,p])=>`${h}: ${p} pts`).join(' | ');
-  return `You are the BVM Assistant for Bal Vidya Mandir, Sambhal (Session 2025-26).
+  return `You are the BVM Assistant for Bal Vidya Mandir, Sambhal (Session ${currentSessionLabel}).
 You are an expert on this school's inter-house competition management system.
 
 FOUR HOUSES: Ekta House (green), Sankalp House (blue), Prayas House (orange), Vishwas House (purple)

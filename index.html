@@ -13,14 +13,14 @@
   /* ── COMPLETE STYLES FROM ORIGINAL (All preserved) ── */
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
   :root {
-    --bg: #07090f;
-    --surface: #0d1117;
-    --card: #111827;
-    --border: rgba(255,255,255,0.07);
-    --text: #e8ecf4;
-    --muted: #6b7a99;
-    --gold: #f0b429;
-    --gold-dim: rgba(240,180,41,0.15);
+    --bg: #091b22;
+    --surface: #102a33;
+    --card: #153642;
+    --border: rgba(151, 220, 210, 0.18);
+    --text: #eefcf9;
+    --muted: #9ac7c2;
+    --gold: #2dd4bf;
+    --gold-dim: rgba(45,212,191,0.16);
     --ekta: #20bf55;
     --sankalp: #e11d2f;
     --prayas: #157fbe;
@@ -32,22 +32,22 @@
     --radius: 12px;
     --sidebar-w: 260px;
     --transition: 0.2s ease;
-    --shadow-soft: 0 18px 40px rgba(0,0,0,0.25);
+    --shadow-soft: 0 18px 44px rgba(0, 18, 24, 0.34);
   }
   body.light-theme {
-    --bg: #f8f6ef;
-    --surface: #fffdf8;
+    --bg: #f3fbf8;
+    --surface: #ffffff;
     --card: #ffffff;
-    --border: rgba(74, 58, 33, 0.14);
-    --text: #23201a;
-    --muted: #746a58;
-    --gold: #9a6a00;
-    --gold-dim: rgba(154, 106, 0, 0.12);
+    --border: rgba(16, 82, 91, 0.16);
+    --text: #10252b;
+    --muted: #5b7e7d;
+    --gold: #0f8f86;
+    --gold-dim: rgba(15, 143, 134, 0.12);
     --danger: #c62b37;
     --success: #198754;
     --warning: #c69200;
     --info: #1565c0;
-    --shadow-soft: 0 18px 40px rgba(119, 96, 46, 0.12);
+    --shadow-soft: 0 18px 40px rgba(16, 82, 91, 0.12);
   }
   html { scroll-behavior: smooth; }
   body {
@@ -63,7 +63,7 @@
   .app { display: flex; min-height: 100vh; }
   .sidebar {
     width: var(--sidebar-w);
-    background: linear-gradient(180deg, var(--surface) 0%, #0a0e14 100%);
+    background: linear-gradient(180deg, #102a33 0%, #0c2028 58%, #111d3b 100%);
     border-right: 1px solid var(--border);
     position: fixed;
     top: 0; left: 0; bottom: 0;
@@ -73,13 +73,10 @@
     transition: transform var(--transition);
     overflow-y: auto;
   }
-  body.light-theme .sidebar { background: linear-gradient(180deg, #fffefb 0%, #f6edd8 40%, #eef5ef 100%); }
+  body.light-theme .sidebar { background: linear-gradient(180deg, #ffffff 0%, #e7f8f4 48%, #edf0ff 100%); }
   body.light-theme .main {
     background:
-      radial-gradient(circle at top left, rgba(225,29,47,0.06), transparent 28%),
-      radial-gradient(circle at top right, rgba(21,127,190,0.08), transparent 32%),
-      radial-gradient(circle at bottom left, rgba(32,191,85,0.08), transparent 28%),
-      radial-gradient(circle at bottom right, rgba(242,201,76,0.11), transparent 30%),
+      linear-gradient(135deg, rgba(45,212,191,0.08), rgba(99,102,241,0.06)),
       var(--bg);
   }
   body.light-theme ::-webkit-scrollbar-thumb { background: #bfa781; }
@@ -234,8 +231,8 @@
     transition: all var(--transition);
   }
   .switcher-btn.active {
-    background: linear-gradient(135deg, var(--gold), #f5c542);
-    color: #111827;
+    background: linear-gradient(135deg, #2dd4bf, #818cf8);
+    color: #07181c;
     box-shadow: var(--shadow-soft);
   }
   .topbar-badge {
@@ -544,7 +541,7 @@
     font-weight: 500;
     transition: all 0.2s;
   }
-  .btn-primary { background: linear-gradient(135deg, var(--gold), #f5c542); color: #0a0a0a; }
+  .btn-primary { background: linear-gradient(135deg, #2dd4bf, #818cf8); color: #07181c; }
   .btn-primary:hover { transform: translateY(-1px); filter: brightness(1.05); }
   .btn-secondary { background: rgba(255,255,255,0.08); color: var(--text); border: 1px solid var(--border); }
   .btn-secondary:hover { background: rgba(255,255,255,0.12); transform: translateY(-1px); }
@@ -764,6 +761,208 @@
     .topbar-controls { gap: 8px; width: 100%; }
     .switcher { width: 100%; justify-content: space-between; }
   }  /* ── BVM CHATBOT ── */
+  @media print {
+    @page {
+      size: A4;
+      margin: 12mm;
+    }
+
+    :root,
+    body,
+    body.light-theme {
+      --bg: #ffffff;
+      --surface: #ffffff;
+      --card: #ffffff;
+      --border: #7a7a7a;
+      --text: #000000;
+      --muted: #202020;
+      --gold: #5f4100;
+      --gold-dim: #f2e3b6;
+      --danger: #9b111e;
+      --success: #0f6b3e;
+      --warning: #855900;
+      --info: #064c9b;
+      --shadow-soft: none;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation: none !important;
+      box-shadow: none !important;
+      filter: none !important;
+      text-shadow: none !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    html,
+    body {
+      background: #ffffff !important;
+      color: #000000 !important;
+      zoom: 1 !important;
+      padding: 0 !important;
+      min-height: auto !important;
+      overflow: visible !important;
+    }
+
+    .sidebar,
+    .topbar,
+    .mobile-menu-btn,
+    #bvm-chat-btn,
+    #bvm-chat-box,
+    .toast,
+    .page-action-row,
+    .btn,
+    button,
+    input[type="button"],
+    input[type="submit"] {
+      display: none !important;
+    }
+
+    .app,
+    .main,
+    .page,
+    .page.active {
+      display: block !important;
+      width: 100% !important;
+      max-width: none !important;
+      min-height: auto !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: visible !important;
+      background: #ffffff !important;
+      color: #000000 !important;
+    }
+
+    .page:not(.active) {
+      display: none !important;
+    }
+
+    .page-header {
+      margin: 0 0 14px !important;
+      padding-bottom: 8px !important;
+      border-bottom: 2px solid #000000 !important;
+      break-after: avoid;
+    }
+
+    .page-header h1,
+    .section-title,
+    .panel h3,
+    .event-card h3,
+    .participant-picker-card h3 {
+      background: none !important;
+      color: #000000 !important;
+      -webkit-background-clip: initial !important;
+      -webkit-text-fill-color: #000000 !important;
+    }
+
+    .page-header p,
+    .section-title,
+    .stat-label,
+    .meta,
+    .form-group label,
+    .chairman-preview-head span,
+    .chairman-preview-foot {
+      color: #202020 !important;
+    }
+
+    .panel,
+    .stat-card,
+    .event-card,
+    .participant-picker-card,
+    .lb-item,
+    .alert,
+    .student-row,
+    .selected-row,
+    .upload-zone {
+      background: #ffffff !important;
+      border: 1.5px solid #555555 !important;
+      color: #000000 !important;
+      break-inside: avoid;
+    }
+
+    .stat-card::before,
+    .section-title::after {
+      background: #555555 !important;
+    }
+
+    .stat-num,
+    .lb-rank,
+    .lb-pts,
+    .brand-text strong,
+    .topbar-title,
+    strong,
+    th {
+      color: #000000 !important;
+      -webkit-text-fill-color: #000000 !important;
+    }
+
+    .data-table,
+    .events-table {
+      display: table !important;
+      width: 100% !important;
+      border-collapse: collapse !important;
+      color: #000000 !important;
+      font-size: 11px !important;
+    }
+
+    .data-table th,
+    .data-table td,
+    .events-table th,
+    .events-table td {
+      border: 1px solid #555555 !important;
+      background: #ffffff !important;
+      color: #000000 !important;
+      padding: 7px 8px !important;
+    }
+
+    .data-table th,
+    .events-table th {
+      background: #e8e8e8 !important;
+      font-weight: 700 !important;
+    }
+
+    .events-grid,
+    .stats-grid,
+    .participant-picker-grid,
+    .form-grid {
+      display: block !important;
+    }
+
+    .event-card,
+    .stat-card,
+    .participant-picker-card,
+    .panel {
+      margin-bottom: 10px !important;
+      padding: 12px !important;
+    }
+
+    .lb-bar {
+      border: 1px solid #555555 !important;
+      background: #ffffff !important;
+    }
+
+    .lb-bar-fill,
+    .house-dot,
+    .lb-house-dot {
+      border: 1px solid #000000 !important;
+    }
+
+    a,
+    a:visited {
+      color: #000000 !important;
+      text-decoration: none !important;
+    }
+
+    img,
+    canvas,
+    svg {
+      max-width: 100% !important;
+      break-inside: avoid;
+    }
+  }
+  /* ── BVM CHATBOT ── */
   #bvm-chat-btn { position:fixed;bottom:28px;right:28px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--gold),#f5c542);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:3000;box-shadow:0 8px 24px rgba(0,0,0,0.35);font-size:22px;border:none;transition:transform 0.2s; }
   #bvm-chat-btn:hover { transform:scale(1.08); }
   #bvm-chat-box { display:none;position:fixed;bottom:96px;right:28px;width:360px;max-height:540px;background:var(--card);border:1px solid var(--border);border-radius:20px;z-index:3000;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,0.5); }
@@ -1022,6 +1221,109 @@
     75% { transform:translate(-6px, 2px); }
   }
 
+
+  /* -- GUI THEME REFRESH: teal/indigo, larger text, icon-forward controls -- */
+  body {
+    font-size: 15px;
+    line-height: 1.45;
+    background:
+      linear-gradient(135deg, rgba(45,212,191,0.10), rgba(129,140,248,0.08)),
+      var(--bg);
+  }
+  .topbar {
+    height: 68px;
+    background: rgba(16,42,51,0.92);
+    backdrop-filter: blur(14px);
+  }
+  body.light-theme .topbar { background: rgba(255,255,255,0.92); }
+  .topbar-title { font-size: 18px; }
+  .brand-text strong { font-size: 17px; }
+  .brand-text span,
+  .session-pill,
+  .topbar-badge,
+  .switcher-label { font-size: 12px; }
+  .nav-item {
+    font-size: 15px;
+    padding: 12px 18px;
+    margin: 3px 10px;
+    border-radius: 10px;
+  }
+  .nav-sub { padding-left: 52px; background: rgba(45,212,191,0.05); }
+  .nav-sub-item {
+    font-size: 14px;
+    padding: 9px 12px;
+  }
+  .nav-item .icon {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: rgba(45,212,191,0.14);
+    color: var(--gold);
+    box-shadow: inset 0 0 0 1px rgba(45,212,191,0.22);
+  }
+  .nav-item.active .icon,
+  .nav-item:hover .icon {
+    background: linear-gradient(135deg, #2dd4bf, #818cf8);
+    color: #07181c;
+  }
+  .panel,
+  .event-card,
+  .stat-card {
+    border-color: rgba(151,220,210,0.20);
+    box-shadow: 0 18px 44px rgba(0,18,24,0.22);
+  }
+  .panel h3,
+  .event-card h3 {
+    font-size: 17px;
+  }
+  .page-header h1 { font-size: 30px; }
+  .page-header p,
+  .event-card .meta,
+  .form-group input,
+  .form-group select,
+  .form-group textarea,
+  .events-table,
+  .data-table {
+    font-size: 14px;
+  }
+  .form-group label,
+  .events-table th,
+  .data-table th {
+    font-size: 12px;
+  }
+  .btn {
+    font-size: 14px;
+    min-height: 40px;
+    border-radius: 10px;
+    box-shadow: 0 10px 24px rgba(0,18,24,0.16);
+  }
+  .btn-primary::before { content: '◆'; font-size: 12px; }
+  .btn-success::before { content: '✓'; font-weight: 700; }
+  .btn-danger::before { content: '×'; font-weight: 800; }
+  .btn-secondary::before { content: '◦'; font-size: 16px; }
+  .switcher::before {
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: rgba(45,212,191,0.13);
+    color: var(--gold);
+    font-weight: 700;
+  }
+  .switcher[aria-label="Theme switcher"]::before { content: '◐'; }
+  .switcher[aria-label="View switcher"]::before { content: '▦'; }
+  .switcher-btn { font-size: 13px; padding: 8px 13px; }
+  .stat-card::before {
+    height: 4px;
+    background: linear-gradient(90deg, #2dd4bf, #818cf8, transparent);
+  }
+  .section-title { font-size: 17px; }
+
 </style>
 </head>
 <body>
@@ -1035,7 +1337,7 @@
         <span>House Management System</span>
       </div>
     </div>
-    <div class="session-pill" id="sessionPill">SESSION 2025 – 26</div>
+    <div class="session-pill" id="sessionPill">SESSION 2026 – 27</div>
     <div class="user-badge" id="userBadge">
       <span id="userBadgeName">—</span>
       <button class="logout-btn" onclick="logout()">Logout</button>
@@ -1254,7 +1556,7 @@
       <div class="panel">
         <h3>Upload Excel File</h3>
         <p style="font-size:12px; color:var(--muted); margin-bottom:12px;">
-Required columns: <code>admission_no, roll_no, student_name, class, section, house, father_name, gender, contact_number</code>
+Required columns: <code>roll_no, admission_no, student_name, class, section, father_name, gender, house, phone</code>
         </p>
         <div class="upload-zone" onclick="document.getElementById('studentFile').click()">
           <div class="upload-icon">📁</div>
@@ -1289,6 +1591,7 @@ Required columns: <code>admission_no, roll_no, student_name, class, section, hou
           <div class="form-group"><label>For Class</label><input type="text" id="evClass" placeholder="e.g., VI – VIII"></div>
           <div class="form-group"><label>Date</label><input type="date" id="evDate"></div>
           <div class="form-group"><label>Open to All Houses</label><select id="evOpen"><option value="yes">Yes</option><option value="no">No (House Specific)</option></select></div>
+          <div class="form-group"><label>Initial Status</label><select id="evStatus"><option value="active">Active</option><option value="suspended">Suspended</option></select></div>
           <div class="form-group"><label>Participants per House (e.g., 5, 3-8, any)</label><input type="text" id="evParticipants" placeholder="any"></div>
         </div>
         <div style="display:flex; gap:10px; margin-top:4px; flex-wrap:wrap;">
@@ -1322,6 +1625,7 @@ Required columns: <code>admission_no, roll_no, student_name, class, section, hou
         <div style="display:flex; gap:12px; flex-wrap:wrap;">
           <button class="btn btn-primary" onclick="findByEventHouse()">Search</button>
           <button class="btn btn-secondary" onclick="printFindEventHouseResults()">Print</button>
+          <button class="btn btn-secondary" onclick="exportTableToCsv('findEventPrintArea','Find Event and House Results.csv')">Export CSV</button>
         </div>
       </div>
       <div id="findEventResults"></div>
@@ -1418,6 +1722,8 @@ let isSavingResult = false;
 let currentOpenEventParticipants = [];
 let currentCertificateEntries = [];
 let certificateTemplateCache = null;
+let eventModeMemory = JSON.parse(localStorage.getItem('bvm_event_mode_memory') || '{}');
+let auditLogEntries = JSON.parse(localStorage.getItem('bvm_audit_log') || '[]');
 
 function defaultHousePoints() {
   return {
@@ -1426,6 +1732,69 @@ function defaultHousePoints() {
     'Prayas House': 0,
     'Vishwas House': 0
   };
+}
+function persistEventModeMemory() {
+  localStorage.setItem('bvm_event_mode_memory', JSON.stringify(eventModeMemory));
+}
+
+function getEventBaseMode(eventOrId, fallbackMode = 'no') {
+  const id = typeof eventOrId === 'object' ? eventOrId?.id : eventOrId;
+  const openValue = typeof eventOrId === 'object' ? eventOrId?.open : '';
+  if(openValue === 'yes' || openValue === 'no') return openValue;
+  return eventModeMemory[String(id)] || fallbackMode || 'no';
+}
+
+function isRegistrationClosed(event = {}) {
+  return event.open === 'registration_closed' || event.open === 'closed';
+}
+
+function canRegisterForEvent(event = {}, now = new Date()) {
+  return !!event.id && event.open !== 'suspended' && !isRegistrationClosed(event) && !isEventPassed(event, now) && !hasResultForEvent(event.id);
+}
+
+function eventTypeLabel(event = {}) {
+  return getEventBaseMode(event, 'no') === 'yes' ? 'Open' : 'House Specific';
+}
+
+function eventStatusLabel(event = {}, now = new Date()) {
+  if(event.open === 'suspended') return 'Suspended';
+  if(isRegistrationClosed(event)) return 'Registration Closed';
+  if(hasResultForEvent(event.id)) return 'Result Declared';
+  if(isEventPassed(event, now)) return 'Passed';
+  return 'Upcoming';
+}
+
+function eventStatusTagClass(event = {}, now = new Date()) {
+  const label = eventStatusLabel(event, now);
+  if(label === 'Suspended') return 'tag-suspended';
+  if(label === 'Result Declared' || label === 'Passed' || label === 'Registration Closed') return 'tag-completed';
+  return 'tag-upcoming';
+}
+
+function addAuditLog(action, details = {}) {
+  const entry = {
+    time: new Date().toISOString(),
+    session: currentSessionLabel,
+    actor: isAdminLoggedIn ? 'Admin' : (currentHouse || 'System'),
+    action,
+    details
+  };
+  auditLogEntries.unshift(entry);
+  auditLogEntries = auditLogEntries.slice(0, 500);
+  localStorage.setItem('bvm_audit_log', JSON.stringify(auditLogEntries));
+}
+
+function clearAuditLog() {
+  if(!confirm('Clear audit log from this browser?')) return;
+  auditLogEntries = [];
+  localStorage.setItem('bvm_audit_log', '[]');
+  showDataTools();
+  showToast('Audit log cleared', 'warning');
+}
+
+function renderAuditLogTable() {
+  if(!auditLogEntries.length) return '<div class="empty"><p>No audit entries yet.</p></div>';
+  return `<div style="overflow-x:auto; max-height:320px;"><table class="data-table"><thead><tr><th>Date / Time</th><th>Actor</th><th>Action</th><th>Details</th></tr></thead><tbody>${auditLogEntries.slice(0, 80).map(entry => `<tr><td>${esc(new Date(entry.time).toLocaleString())}</td><td>${esc(entry.actor)}</td><td>${esc(entry.action)}</td><td>${esc(Object.entries(entry.details || {}).map(([k,v]) => `${k}: ${v}`).join(' | '))}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
 function updateSwitcherButtons() {
@@ -2027,7 +2396,7 @@ async function loadEvents() {
     const statEvents = document.getElementById('statEvents');
     const statUpcoming = document.getElementById('statUpcoming');
     if(statEvents) statEvents.textContent = allEvents.length;
-    if(statUpcoming) statUpcoming.textContent = allEvents.filter(e => e.open !== 'suspended' && !isEventPassed(e, now)).length;
+    if(statUpcoming) statUpcoming.textContent = allEvents.filter(e => canRegisterForEvent(e, now)).length;
     document.getElementById('eventCount').textContent = allEvents.length;
     renderEventsList();
     renderDashboardEvents();
@@ -2040,13 +2409,14 @@ function renderStudentList() {
   if(!el) return;
   if(!allStudents.length) { el.innerHTML = `<div class="empty" style="padding:40px"><p>No students yet</p></div>`; return; }
   el.innerHTML = `<div style="overflow-x:auto"><table class="data-table"><thead><tr><th>Adm No.</th><th>Roll No.</th><th>Name</th><th>Class</th><th>Section</th><th>House</th><th>Contact No.</th><th>Actions</th></tr></thead><tbody>` +
-    sortStudentsAscending(allStudents).map(s => `<tr><td>${esc(s.admission_no)}</td><td>${esc(s.roll_no || s.roll || '—')}</td><td><strong>${esc(s.student_name)}</strong></td><td>${esc(s.class)}</td><td>${esc(s.section)}</td><td><span style="color:${HOUSE_META[houseKey(s.house)]?.color || '#fff'}">${esc(s.house || 'Not Assigned')}</span></td><td>${esc(s.contact_number || s.phone || 'â€”')}</td><td><button class="btn btn-danger btn-sm" onclick="deleteStudent(${s.id})">Delete</button></td></tr>`).join('') + `</tbody></table></div>`;
+    sortStudentsAscending(allStudents).map(s => `<tr><td>${esc(s.admission_no)}</td><td>${esc(s.roll_no || s.roll || '—')}</td><td><strong>${esc(s.student_name)}</strong></td><td>${esc(s.class)}</td><td>${esc(s.section)}</td><td><span style="color:${HOUSE_META[houseKey(s.house)]?.color || '#fff'}">${esc(s.house || 'Not Assigned')}</span></td><td>${esc(s.contact_number || s.phone || '—')}</td><td><button class="btn btn-danger btn-sm" onclick="deleteStudent(${s.id})">Delete</button></td></tr>`).join('') + `</tbody></table></div>`;
 }
 
 async function deleteStudent(id) {
   if(!confirm('Delete this student?')) return;
   const { error } = await db.from('students').delete().eq('id', id);
   if(error) { showToast('Error deleting student', 'error'); return; }
+  addAuditLog('Deleted student', { id });
   showToast('Student deleted successfully', 'success');
   loadStudents();
 }
@@ -2056,15 +2426,27 @@ function renderEventsList() {
   if(!el) return;
   if(!allEvents.length) { el.innerHTML = `<div class="empty"><p>No events yet</p></div>`; return; }
   const now = new Date();
+  const actionButtons = (e) => {
+    const isSuspended = e.open === 'suspended';
+    const closed = isRegistrationClosed(e);
+    return `
+      <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
+        ${isSuspended || closed
+          ? `<button class="btn btn-secondary btn-sm" onclick="resumeEvent(${e.id}, '${getEventBaseMode(e)}')">Resume Registration</button>`
+          : `<button class="btn btn-secondary btn-sm" onclick="suspendEvent(${e.id})">Suspend</button><button class="btn btn-secondary btn-sm" onclick="closeEventRegistration(${e.id})">Close Add Participant</button>`}
+        <button class="btn btn-secondary btn-sm" onclick="rescheduleEvent(${e.id})">Reschedule</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteEvent(${e.id})">Delete</button>
+      </div>`;
+  };
   const cardHtml = allEvents.map(e => `
     <div class="event-card">
-      <span class="tag ${e.open === 'suspended' ? 'tag-suspended' : (isEventPassed(e, now) ? 'tag-completed' : 'tag-upcoming')}">${e.open === 'suspended' ? 'Suspended' : (isEventPassed(e, now) ? 'Passed' : 'Upcoming')}</span>
+      <span class="tag ${eventStatusTagClass(e, now)}">${esc(eventStatusLabel(e, now))}</span>
       <h3>${esc(formatEventLabel(e))}</h3>
       <div class="meta">📚 ${esc(e.for_class || 'All classes')}</div>
       <div class="meta">📅 ${esc(e.event_date || 'TBD')}</div>
       <div class="meta">👥 ${esc(e.participants || 'Any')}</div>
-      <div class="meta">${e.open === 'yes' ? '<span class="tag tag-open">Open</span>' : '🏠 House Specific'}</div>
-      <div style="margin-top:12px;"><button class="btn btn-danger btn-sm" onclick="deleteEvent(${e.id})">Delete</button></div>
+      <div class="meta">${eventTypeLabel(e) === 'Open' ? '<span class="tag tag-open">Open</span>' : '🏠 House Specific'}</div>
+      ${actionButtons(e)}
     </div>
   `).join('');
   const tableHtml = `<table class="events-table"><thead><tr><th>#</th><th>Event Name</th><th>Class</th><th>Date</th><th>Type</th><th>Participants</th><th>Status</th><th>Action</th></tr></thead><tbody>` +
@@ -2073,10 +2455,14 @@ function renderEventsList() {
       <td><strong>${esc(formatEventLabel(e))}</strong></td>
       <td>${esc(e.for_class || 'All')}</td>
       <td>${esc(e.event_date || 'TBD')}</td>
-      <td>${e.open === 'yes' ? '<span class="tag tag-open" style="font-size:10px;">Open</span>' : '🏠 House'}</td>
+      <td>${eventTypeLabel(e) === 'Open' ? '<span class="tag tag-open" style="font-size:10px;">Open</span>' : '🏠 House'}</td>
       <td>${esc(e.participants || 'Any')}</td>
-      <td><span class="tag ${e.open === 'suspended' ? 'tag-suspended' : (isEventPassed(e, now) ? 'tag-completed' : 'tag-upcoming')}" style="font-size:10px;">${e.open === 'suspended' ? 'Suspended' : (isEventPassed(e, now) ? 'Passed' : 'Upcoming')}</span></td>
-      <td><button class="btn btn-danger btn-sm" onclick="deleteEvent(${e.id})">Delete</button></td>
+      <td><span class="tag ${eventStatusTagClass(e, now)}" style="font-size:10px;">${esc(eventStatusLabel(e, now))}</span></td>
+      <td>${e.open === 'suspended' || isRegistrationClosed(e)
+        ? `<button class="btn btn-secondary btn-sm" onclick="resumeEvent(${e.id}, '${getEventBaseMode(e)}')">Resume Registration</button> `
+        : `<button class="btn btn-secondary btn-sm" onclick="suspendEvent(${e.id})">Suspend</button> <button class="btn btn-secondary btn-sm" onclick="closeEventRegistration(${e.id})">Close Add Participant</button> `}
+        <button class="btn btn-secondary btn-sm" onclick="rescheduleEvent(${e.id})">Reschedule</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteEvent(${e.id})">Delete</button></td>
     </tr>`).join('') + `</tbody></table>`;
   el.innerHTML = `<div class="events-grid">${cardHtml}</div>${tableHtml}`;
 }
@@ -2110,6 +2496,7 @@ async function deleteEvent(id) {
   await db.from('events').delete().eq('id', id);
   await db.from('open_participants').delete().eq('event_id', id);
   await db.from('house_participants').delete().eq('event_id', id);
+  addAuditLog('Deleted event', { event: formatEventLabel(allEvents.find(item => String(item.id) === String(id)) || {}) });
   loadEvents();
   showToast('Event deleted', 'success');
 }
@@ -2126,12 +2513,14 @@ async function deleteResult(id, eventLabel = 'this event') {
   await loadResults();
   await loadEvents();
   renderAdminResultsList();
+  addAuditLog('Cleared result', { event: eventLabel });
   showToast(`Cleared result for ${eventLabel}`, 'success');
 }
 
 async function clearAllEvents() {
   if(!confirm('⚠️ Delete ALL events? This cannot be undone.')) return;
   await db.from('events').delete().neq('id', 0);
+  addAuditLog('Cleared all events');
   loadEvents();
   showToast('All events cleared', 'warning');
 }
@@ -2139,6 +2528,7 @@ async function clearAllEvents() {
 async function clearAllStudents() {
   if(!confirm('⚠️ Delete ALL students? This cannot be undone.')) return;
   await db.from('students').delete().neq('id', 0);
+  addAuditLog('Cleared all students');
   loadStudents();
   showToast('All students cleared', 'warning');
 }
@@ -2146,7 +2536,7 @@ async function clearAllStudents() {
 function showDataTools() {
   const archives = JSON.parse(localStorage.getItem('bvm_session_archives') || '[]');
   document.getElementById('page-dynamic').innerHTML = `
-    <div class="page-header"><h1>Data Tools</h1><p>Admin-only data reset and session controls.</p></div>
+    <div class="page-header"><h1>Data Tools</h1><p>Admin-only reports, audit log, reset and session controls.</p></div>
     <div class="panel">
       <h3>Current Session</h3>
       <div class="alert alert-info">Active session: <strong>${esc(currentSessionLabel)}</strong></div>
@@ -2155,6 +2545,22 @@ function showDataTools() {
         <button class="btn btn-danger" onclick="clearAllDataAndReset()">Clear All Data</button>
         <button class="btn btn-primary" onclick="startNextSession()">Change Session</button>
       </div>
+    </div>
+    <div class="panel">
+      <h3>Print-Friendly Reports</h3>
+      <div style="display:flex; gap:12px; flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="printParticipantReport()">Print Participant Report</button>
+        <button class="btn btn-secondary" onclick="printHouseStudentReport()">Print House Student List</button>
+        <button class="btn btn-secondary" onclick="printAnnualSummaryReport()">Print Annual Summary</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Audit Log</h3>
+      <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:14px;">
+        <button class="btn btn-secondary" onclick="printAuditLog()">Print Audit Log</button>
+        <button class="btn btn-danger" onclick="clearAuditLog()">Clear Audit Log</button>
+      </div>
+      ${renderAuditLogTable()}
     </div>
     <button class="btn btn-secondary" style="margin-top:16px" onclick="showPage('dashboard','Dashboard')">← Back</button>`;
   showPage('dynamic', 'Data Tools');
@@ -2174,6 +2580,7 @@ async function clearAllDataAndReset() {
   await loadStudents();
   await loadEvents();
   showDataTools();
+  addAuditLog('Cleared all live data');
   showToast('All live data cleared. System is fresh now.', 'warning');
 }
 
@@ -2196,6 +2603,7 @@ async function startNextSession() {
   await clearAllDataAndReset();
   applySessionLabel(cleanSession);
   showDataTools();
+  addAuditLog('Changed session', { from: snapshot.session, to: cleanSession });
   showToast(`Ready for next session: ${cleanSession}`, 'success');
 }
 
@@ -2203,7 +2611,7 @@ function renderDashboardEvents() {
   const el = document.getElementById('dashboardEvents');
   if(!el) return;
   const now = new Date();
-  const upcoming = allEvents.filter(e => e.open !== 'suspended' && !isEventPassed(e, now)).slice(0, 6);
+  const upcoming = allEvents.filter(e => canRegisterForEvent(e, now)).slice(0, 6);
   if(!upcoming.length) { el.innerHTML = `<div class="empty"><p>No upcoming events</p></div>`; return; }
   el.innerHTML = upcoming.map(e => `
     <div class="event-card">
@@ -2220,10 +2628,12 @@ function renderDashboardEvents() {
 async function addEvent() {
   const name = document.getElementById('evName').value.trim();
   if(!name) { showToast('Event name is required', 'error'); return; }
+  const openMode = document.getElementById('evOpen').value;
+  const initialStatus = document.getElementById('evStatus').value;
   const ev = {
     event_name: name,
     for_class: document.getElementById('evClass').value.trim(),
-    open: document.getElementById('evOpen').value,
+    open: initialStatus === 'suspended' ? 'suspended' : openMode,
     event_date: document.getElementById('evDate').value,
     participants: document.getElementById('evParticipants').value.trim() || 'any'
   };
@@ -2232,16 +2642,76 @@ async function addEvent() {
   document.getElementById('evName').value = '';
   document.getElementById('evClass').value = '';
   document.getElementById('evDate').value = '';
+  document.getElementById('evStatus').value = 'active';
   document.getElementById('evParticipants').value = '';
   await loadEvents();
+  addAuditLog('Added event', { event: name, mode: eventTypeLabel(ev), date: ev.event_date || 'TBD' });
   showToast('Event added successfully!', 'success');
+}
+
+async function suspendEvent(id) {
+  const event = allEvents.find(item => String(item.id) === String(id));
+  if(!event) return;
+  if(event.open === 'yes' || event.open === 'no') {
+    eventModeMemory[String(id)] = event.open;
+    persistEventModeMemory();
+  }
+  const { error } = await db.from('events').update({ open: 'suspended' }).eq('id', id);
+  if(error) { showToast('Could not suspend event', 'error'); return; }
+  await loadEvents();
+  addAuditLog('Suspended event', { event: formatEventLabel(event) });
+  showToast(`Suspended ${formatEventLabel(event)}`, 'warning');
+}
+
+async function closeEventRegistration(id) {
+  const event = allEvents.find(item => String(item.id) === String(id));
+  if(!event) return;
+  if(event.open === 'yes' || event.open === 'no') {
+    eventModeMemory[String(id)] = event.open;
+    persistEventModeMemory();
+  }
+  const { error } = await db.from('events').update({ open: 'registration_closed' }).eq('id', id);
+  if(error) { showToast('Could not close participant registration', 'error'); return; }
+  await loadEvents();
+  addAuditLog('Closed participant registration', { event: formatEventLabel(event) });
+  showToast(`Add Participant closed for ${formatEventLabel(event)}`, 'warning');
+}
+
+async function resumeEvent(id, fallbackMode = 'no') {
+  const event = allEvents.find(item => String(item.id) === String(id));
+  if(!event) return;
+  const restoredMode = eventModeMemory[String(id)] || fallbackMode || 'no';
+  const { error } = await db.from('events').update({ open: restoredMode }).eq('id', id);
+  if(error) { showToast('Could not resume event', 'error'); return; }
+  eventModeMemory[String(id)] = restoredMode;
+  persistEventModeMemory();
+  await loadEvents();
+  addAuditLog('Resumed event registration', { event: formatEventLabel(event), mode: restoredMode === 'yes' ? 'Open' : 'House Specific' });
+  showToast(`Resumed ${formatEventLabel(event)} as ${restoredMode === 'yes' ? 'Open' : 'House Specific'}`, 'success');
+}
+
+async function rescheduleEvent(id) {
+  const event = allEvents.find(item => String(item.id) === String(id));
+  if(!event) return;
+  const newDate = prompt(`Enter new date for ${formatEventLabel(event)} in YYYY-MM-DD format`, event.event_date || '');
+  if(newDate === null) return;
+  const trimmed = String(newDate || '').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) { showToast('Enter date in YYYY-MM-DD format', 'error'); return; }
+  const { error } = await db.from('events').update({ event_date: trimmed }).eq('id', id);
+  if(error) { showToast('Could not reschedule event', 'error'); return; }
+  await loadEvents();
+  addAuditLog('Rescheduled event', { event: formatEventLabel(event), date: trimmed });
+  showToast(`Rescheduled ${formatEventLabel(event)} to ${trimmed}`, 'success');
 }
 
 function populateEventDropdown() {
   const sel = document.getElementById('eventSelect');
   if(!sel) return;
+  const now = new Date();
+  const eligibleEvents = allEvents.filter(event => canRegisterForEvent(event, now));
   sel.innerHTML = '<option value="">— Select an event —</option>' +
-    allEvents.map(e => `<option value="${e.id}" data-open="${e.open}" data-req="${esc(e.participants || 'any')}">${esc(formatEventLabel(e))} (${e.event_date})</option>`).join('');
+    eligibleEvents.map(e => `<option value="${e.id}" data-open="${getEventBaseMode(e)}" data-req="${esc(e.participants || 'any')}">${esc(formatEventLabel(e))} (${e.event_date || 'TBD'})</option>`).join('');
+  if(!eligibleEvents.length) sel.innerHTML += '<option value="" disabled>No active events open for participant entry</option>';
 }
 
 async function onEventChange() {
@@ -2256,6 +2726,13 @@ async function onEventChange() {
   const req = opt.dataset.req || 'any';
   const isOpen = opt.dataset.open === 'yes';
   const eventId = parseInt(opt.value, 10);
+  const selectedEvent = allEvents.find(event => String(event.id) === String(eventId));
+  if(selectedEvent && !canRegisterForEvent(selectedEvent)) {
+    showToast('Participant entry is closed for this event.', 'warning');
+    populateEventDropdown();
+    box.style.display = 'none';
+    return;
+  }
   currentEventReq = req;
   if(db && currentHouse && eventId) {
     const existingRows = await loadRegistrationsForHouse(eventId, currentHouse);
@@ -2450,6 +2927,8 @@ async function registerParticipants() {
   const isOpen = opt.dataset.open === 'yes';
   const eventName = opt.text.split(' (')[0];
   const eventId = parseInt(sel.value);
+  const event = allEvents.find(item => String(item.id) === String(eventId));
+  if(event && !canRegisterForEvent(event)) { showToast('Participant entry is closed for this event.', 'error'); await loadEvents(); return; }
   const table = isOpen ? 'open_participants' : 'house_participants';
   const selectedAdmissions = selectedStudents.map(s => admissionLookupKey(s.admission_no)).filter(Boolean);
   const duplicateSelection = selectedAdmissions.filter(adm => currentEventRegisteredAdmissions.includes(adm));
@@ -2520,6 +2999,7 @@ async function registerParticipants() {
     else console.error('Registration error:', error);
   }
   
+  addAuditLog('Registered participants', { event: eventName, house: currentHouse, count: ok });
   showToast(`✅ Registered ${ok} of ${selectedStudents.length} participants for "${eventName}" in ${isOpen ? 'Open' : 'House'} participants table`, 'success');
   selectedStudents = [];
   updateSelectedPool();
@@ -2536,7 +3016,8 @@ function previewStudentFile(input) {
     try {
       const wb = XLSX.read(new Uint8Array(evt.target.result), { type: 'array' });
       studentExcelData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-      renderPreview('studentPreview', studentExcelData.slice(0,5), ['admission_no', 'roll_no', 'student_name', 'class', 'section', 'house', 'father_name', 'gender', 'contact_number']);
+      const previewRows = studentExcelData.slice(0, 5).map(normalizeStudentUploadRow);
+      renderPreview('studentPreview', previewRows, ['roll_no', 'admission_no', 'student_name', 'class', 'section', 'father_name', 'gender', 'house', 'phone']);
     } catch(e) { document.getElementById('studentPreview').innerHTML = `<div class="alert alert-error">Parse error: ${esc(e.message)}</div>`; }
   };
   reader.readAsArrayBuffer(file);
@@ -2544,15 +3025,15 @@ function previewStudentFile(input) {
 
 function downloadStudentTemplate() {
   const rows = [{
-    admission_no: '11119',
     roll_no: '12',
+    admission_no: '11119',
     student_name: 'Student Name',
     class: 'IX',
     section: 'A',
-    house: 'Ekta House',
     father_name: 'Father Name',
     gender: 'Male',
-    contact_number: '919876543210'
+    house: 'Ekta House',
+    phone: '919876543210'
   }];
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
@@ -2560,40 +3041,121 @@ function downloadStudentTemplate() {
   XLSX.writeFile(wb, 'BVM_Student_Template.xlsx');
 }
 
+function normalizeStudentUploadRow(row) {
+  const clippedFields = [];
+  const clip = (value, maxLen, fieldName) => {
+    const text = String(value || '').trim();
+    if(text.length > maxLen) {
+      clippedFields.push(`${fieldName} (${text.length})`);
+      return text.slice(0, maxLen);
+    }
+    return text;
+  };
+  const normalizedAdmission = admissionLookupKey(getRowValue(row, ['admission_no', 'admission no', 'admission']));
+  return {
+    roll_no: clip(getRowValue(row, ['roll_no', 'roll no', 'roll_number', 'roll number', 'rollno', 'roll']), 20, 'roll_no'),
+    admission_no: clip(normalizedAdmission, 20, 'admission_no'),
+    student_name: String(getRowValue(row, ['student_name', 'student name', 'name']) || '').trim(),
+    class: clip(getRowValue(row, ['class']), 20, 'class'),
+    section: clip(getRowValue(row, ['section']), 20, 'section'),
+    father_name: String(getRowValue(row, ['father_name', 'father name', 'father']) || '').trim(),
+    gender: clip(getRowValue(row, ['gender']), 20, 'gender'),
+    house: clip(getRowValue(row, ['house']), 20, 'house'),
+    phone: clip(getRowValue(row, ['phone', 'contact_number', 'contact number', 'contact', 'mobile', 'mobile number']), 20, 'phone'),
+    _clippedFields: clippedFields
+  };
+}
+
+function renderStudentUploadProgress(processed, total, inserted, updated, skipped) {
+  const status = document.getElementById('studentUploadStatus');
+  if(!status) return;
+  const percent = total ? Math.min(100, Math.round((processed / total) * 100)) : 0;
+  const remaining = Math.max(total - processed, 0);
+  status.innerHTML = `
+    <div class="alert alert-info" style="display:grid; gap:10px; margin-top:12px;">
+      <div><strong>Uploading student data...</strong> ${processed}/${total} processed, ${remaining} left</div>
+      <div style="width:100%; height:12px; background:rgba(0,0,0,0.08); border-radius:999px; overflow:hidden;">
+        <div style="height:100%; width:${percent}%; background:linear-gradient(90deg, var(--accent), #34d399); transition:width .2s ease;"></div>
+      </div>
+      <div style="font-size:12px; color:var(--muted);">${percent}% complete • Inserted ${inserted} • Updated ${updated} • Skipped ${skipped}</div>
+    </div>
+  `;
+}
+
 async function uploadStudents() {
   if(!isAdminLoggedIn) { showToast('Admin access required', 'error'); return; }
   if(!studentExcelData.length) { showToast('Select a file first', 'error'); return; }
   const status = document.getElementById('studentUploadStatus');
-  status.innerHTML = `<div class="alert alert-info">Uploading...</div>`;
+  const normalizedRows = studentExcelData.map(normalizeStudentUploadRow);
+  const validRows = normalizedRows.filter(row => row.admission_no && row.student_name);
+  const dedupedRows = Array.from(new Map(validRows.map(row => [row.admission_no, row])).values());
+  const clippedRows = dedupedRows.filter(row => row._clippedFields?.length);
+  const skipped = normalizedRows.length - dedupedRows.length;
+  if(!dedupedRows.length) {
+    status.innerHTML = `<div class="alert alert-error">No valid student rows found. Please check the required columns.</div>`;
+    return;
+  }
+
   let inserted = 0;
   let updated = 0;
-  for(const row of studentExcelData) {
-    const adm = admissionLookupKey(getRowValue(row, ['admission_no', 'admission no', 'admission']));
-    const name = String(row.student_name || '').trim();
-    if(!adm || !name) continue;
-    const payload = {
-      admission_no: adm,
-      roll_no: String(getRowValue(row, ['roll_no', 'roll no', 'roll_number', 'roll number', 'rollno', 'roll']) || ''),
-      student_name: name,
-      class: String(row.class || ''),
-      section: String(row.section || ''),
-      house: String(row.house || ''),
-      father_name: String(row.father_name || ''),
-      gender: String(row.gender || ''),
-      phone: String(row.contact_number || row.phone || '')
-    };
-    const { data: ex } = await db.from('students').select('id').eq('admission_no', adm);
-    let error = null;
-    if(ex?.length) {
-      ({ error } = await db.from('students').update(payload).eq('id', ex[0].id));
-      if(!error) updated++;
-    } else {
-      ({ error } = await db.from('students').insert([payload]));
-      if(!error) inserted++;
-    }
+  let processed = 0;
+  renderStudentUploadProgress(processed, dedupedRows.length, inserted, updated, skipped);
+
+  const { data: existingStudents, error: existingError } = await db.from('students').select('id, admission_no');
+  if(existingError) {
+    status.innerHTML = `<div class="alert alert-error">Upload failed: ${esc(existingError.message)}</div>`;
+    return;
   }
-  status.innerHTML = `<div class="alert alert-success">✅ Inserted ${inserted} new students and updated ${updated} existing students</div>`;
-  showToast(`Inserted ${inserted}, updated ${updated} students`, 'success');
+
+  const existingByAdmission = new Map((existingStudents || []).map(student => [admissionLookupKey(student.admission_no), student.id]));
+  const batchSize = 100;
+  for(let start = 0; start < dedupedRows.length; start += batchSize) {
+    const batch = dedupedRows.slice(start, start + batchSize);
+    const inserts = [];
+    const updates = [];
+
+    batch.forEach(row => {
+      const payload = {
+        roll_no: row.roll_no,
+        admission_no: row.admission_no,
+        student_name: row.student_name,
+        class: row.class,
+        section: row.section,
+        father_name: row.father_name,
+        gender: row.gender,
+        house: row.house,
+        phone: row.phone
+      };
+      const existingId = existingByAdmission.get(row.admission_no);
+      if(existingId) updates.push({ id: existingId, payload });
+      else inserts.push(payload);
+    });
+
+    if(inserts.length) {
+      const { error } = await db.from('students').insert(inserts);
+      if(error) {
+        status.innerHTML = `<div class="alert alert-error">Upload failed: ${esc(error.message)}</div>`;
+        return;
+      }
+      inserted += inserts.length;
+    }
+
+    for(const item of updates) {
+      const { error } = await db.from('students').update(item.payload).eq('id', item.id);
+      if(error) {
+        status.innerHTML = `<div class="alert alert-error">Upload failed: ${esc(error.message)}</div>`;
+        return;
+      }
+      updated++;
+    }
+
+    processed += batch.length;
+    renderStudentUploadProgress(processed, dedupedRows.length, inserted, updated, skipped);
+  }
+
+  const clipNote = clippedRows.length ? `<div style="font-size:12px; color:var(--muted); margin-top:6px;">${clippedRows.length} row(s) had values trimmed to fit the database limit of 20 characters in short fields.</div>` : '';
+  status.innerHTML = `<div class="alert alert-success">✅ Processed ${dedupedRows.length} valid rows. Inserted ${inserted} new students, updated ${updated} existing students, skipped ${skipped} invalid or duplicate rows.</div>${clipNote}`;
+  showToast(`Processed ${dedupedRows.length} rows: inserted ${inserted}, updated ${updated}, skipped ${skipped}${clippedRows.length ? `, trimmed ${clippedRows.length}` : ''}`, 'success');
   studentExcelData = [];
   setTimeout(() => loadStudents(), 800);
 }
@@ -2686,6 +3248,7 @@ function normalizeEventOpenValue(value) {
   const text = String(value || '').trim().toLowerCase();
   if(text === 'yes' || text === 'open' || text === 'y') return 'yes';
   if(text === 'suspended') return 'suspended';
+  if(text === 'closed' || text === 'registration_closed' || text === 'registration closed') return 'registration_closed';
   return 'no';
 }
 
@@ -2734,9 +3297,9 @@ function showEventsByFilter(filter) {
   const filtered = allEvents.filter(e => {
     if(!e.event_date) return false;
     const d = new Date(e.event_date);
-    if(filter === 'this_month') return e.open !== 'suspended' && !isEventPassed(e, now) && d.getMonth() === nm && d.getFullYear() === ny;
-    if(filter === 'next_month') return e.open !== 'suspended' && !isEventPassed(e, now) && d.getMonth() === fm && d.getFullYear() === fy;
-    if(filter === 'this_week') return e.open !== 'suspended' && !isEventPassed(e, now) && d >= ws && d <= we;
+    if(filter === 'this_month') return canRegisterForEvent(e, now) && d.getMonth() === nm && d.getFullYear() === ny;
+    if(filter === 'next_month') return canRegisterForEvent(e, now) && d.getMonth() === fm && d.getFullYear() === fy;
+    if(filter === 'this_week') return canRegisterForEvent(e, now) && d >= ws && d <= we;
     if(filter === 'passed') return isEventPassed(e, now);
     if(filter === 'suspended') return e.open === 'suspended';
     return true;
@@ -4130,6 +4693,75 @@ function resultReportHeader(subTitle) {
   </div>`;
 }
 
+
+function printPlainReport(title, bodyHtml) {
+  const win = window.open('', '_blank', 'width=1100,height=800');
+  if(!win) { showToast('Pop-up blocked. Please allow pop-ups to print.', 'error'); return; }
+  win.document.write(`<html><head><title>${esc(title)}</title><style>
+    body{font-family:Arial, sans-serif;padding:28px;color:#111;}
+    h1,h2{margin:0;text-align:center;} h1{font-size:22px;} h2{font-size:15px;margin:6px 0 18px;color:#444;}
+    table{width:100%;border-collapse:collapse;margin:14px 0 24px;} th,td{border:1px solid #777;padding:7px 9px;font-size:12px;text-align:left;} th{background:#f1eadb;} .center{text-align:center;} .muted{color:#555;font-size:12px;text-align:center;margin-bottom:18px;} .section{font-weight:bold;margin-top:18px;font-size:15px;}
+  </style></head><body><h1>BAL VIDYA MANDIR, SAMBHAL</h1><h2>${esc(title)}</h2><div class="muted">Session ${esc(currentSessionLabel)} | Printed ${esc(new Date().toLocaleString())}</div>${bodyHtml}</body></html>`);
+  win.document.close();
+  win.focus();
+  win.print();
+}
+
+async function getAllParticipantRows() {
+  const [openRes, houseRes] = await Promise.all([
+    db.from('open_participants').select('*'),
+    db.from('house_participants').select('*')
+  ]);
+  return [
+    ...(openRes.data || []).map(row => ({ ...row, event_type: 'Open' })),
+    ...(houseRes.data || []).map(row => ({ ...row, event_type: 'House' }))
+  ];
+}
+
+async function printParticipantReport() {
+  const rows = await getAllParticipantRows();
+  if(!rows.length) { showToast('No participant registrations found.', 'warning'); return; }
+  const byEvent = new Map();
+  rows.forEach(row => {
+    const key = String(row.event_id || row.event_name || 'Unknown');
+    if(!byEvent.has(key)) byEvent.set(key, []);
+    byEvent.get(key).push(row);
+  });
+  let html = '';
+  [...byEvent.values()].forEach(group => {
+    const event = allEvents.find(item => String(item.id) === String(group[0].event_id || ''));
+    html += `<div class="section">${esc(event ? formatEventLabel(event) : (group[0].event_name || 'Unknown Event'))} (${esc(group[0].event_type)})</div>`;
+    html += `<table><thead><tr><th>#</th><th>Admission No</th><th>Name</th><th>Class</th><th>Section</th><th>House</th><th>Registered By</th></tr></thead><tbody>${sortStudentsAscending(group).map((row, index) => `<tr><td class="center">${index + 1}</td><td>${esc(row.admission_no || '')}</td><td>${esc(row.student_name || '')}</td><td>${esc(row.class || '')}</td><td>${esc(row.section || '')}</td><td>${esc(row.house || '')}</td><td>${esc(row.registered_by || '')}</td></tr>`).join('')}</tbody></table>`;
+  });
+  printPlainReport('Registered Participants Report', html);
+  addAuditLog('Printed participant report');
+}
+
+function printHouseStudentReport() {
+  if(!allStudents.length) { showToast('No students found.', 'warning'); return; }
+  let html = '';
+  getSortedHouseNames().forEach(house => {
+    const students = sortStudentsAscending(allStudents.filter(student => canonicalHouseName(student.house) === house));
+    html += `<div class="section">${esc(house)} - ${students.length} student(s)</div>`;
+    html += `<table><thead><tr><th>#</th><th>Admission No</th><th>Roll No</th><th>Name</th><th>Class</th><th>Section</th><th>Contact</th></tr></thead><tbody>${students.map((student, index) => `<tr><td class="center">${index + 1}</td><td>${esc(student.admission_no || '')}</td><td>${esc(student.roll_no || student.roll || '')}</td><td>${esc(student.student_name || '')}</td><td>${esc(student.class || '')}</td><td>${esc(student.section || '')}</td><td>${esc(student.contact_number || student.phone || '')}</td></tr>`).join('') || '<tr><td colspan="7">No students</td></tr>'}</tbody></table>`;
+  });
+  printPlainReport('House-Wise Student List', html);
+  addAuditLog('Printed house student report');
+}
+
+function printAnnualSummaryReport() {
+  refreshHousePoints();
+  const sorted = Object.entries(housePts).sort((a, b) => b[1] - a[1]);
+  let html = `<table><thead><tr><th>Rank</th><th>House</th><th>Total Points</th></tr></thead><tbody>${sorted.map(([house, points], index) => `<tr><td class="center">${index + 1}</td><td>${esc(house)}</td><td class="center">${esc(points)}</td></tr>`).join('')}</tbody></table>`;
+  html += `<div class="section">Declared Results</div><table><thead><tr><th>#</th><th>Event</th><th>Type</th><th>First</th><th>Second</th><th>Third</th><th>Fourth</th></tr></thead><tbody>${(allResults || []).map((result, index) => `<tr><td class="center">${index + 1}</td><td>${esc(getStoredEventLabel(result))}</td><td>${esc(result.event_type || 'house')}</td><td>${esc(result.first_place || '')}</td><td>${esc(result.second_place || '')}</td><td>${esc(result.third_place || '')}</td><td>${esc(result.fourth_place || '')}</td></tr>`).join('') || '<tr><td colspan="7">No results declared</td></tr>'}</tbody></table>`;
+  printPlainReport('Annual House Summary', html);
+  addAuditLog('Printed annual summary report');
+}
+
+function printAuditLog() {
+  printPlainReport('Audit Log', renderAuditLogTable());
+}
+
 function printResultTable(areaId, title) {
   const area = document.getElementById(areaId);
   if(!area) { showToast('Nothing to print yet.', 'warning'); return; }
@@ -4147,6 +4779,28 @@ function printResultTable(areaId, title) {
     .total-row{font-weight:bold;background:#fffbe6;}
   </style></head><body>${area.innerHTML}</body></html>`);
   win.document.close(); win.focus(); win.print();
+}
+
+function exportTableToCsv(areaId, filename = 'export.csv') {
+  const area = document.getElementById(areaId);
+  if(!area) { showToast('Nothing to export yet.', 'warning'); return; }
+  const table = area.querySelector('table');
+  if(!table) { showToast('No table found to export.', 'warning'); return; }
+  const rows = [...table.querySelectorAll('tr')].map(row =>
+    [...row.querySelectorAll('th,td')].map(cell => {
+      const text = String(cell.textContent || '').replace(/\s+/g, ' ').trim().replace(/"/g, '""');
+      return `"${text}"`;
+    }).join(',')
+  );
+  const blob = new Blob([rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 let singleEventRevealRun = 0;
@@ -4491,6 +5145,7 @@ async function showResultsPositionWise() {
   <div class="panel">${tableHtml}</div>
   <div style="display:flex;gap:12px;margin-top:4px;">
     <button class="btn btn-primary" onclick="printResultTable('pos-wise-area','Position Wise Results — BVM Sambhal')">🖨️ Print</button>
+    <button class="btn btn-secondary" onclick="exportTableToCsv('pos-wise-area','Position Wise Results.csv')">Export CSV</button>
     <button class="btn btn-secondary" onclick="showPage('dashboard','Dashboard')">← Back</button>
   </div>`;
   showPage('dynamic', 'Position Wise');
@@ -4574,6 +5229,7 @@ async function showResultsPointsWise() {
   <div class="panel">${tableHtml}</div>
   <div style="display:flex;gap:12px;margin-top:4px;">
     <button class="btn btn-primary" onclick="printResultTable('pts-wise-area','Points Wise Results — BVM Sambhal')">🖨️ Print</button>
+    <button class="btn btn-secondary" onclick="exportTableToCsv('pts-wise-area','Points Wise Results.csv')">Export CSV</button>
     <button class="btn btn-secondary" onclick="showPage('dashboard','Dashboard')">← Back</button>
   </div>`;
   showPage('dynamic', 'Points Wise');
@@ -4780,6 +5436,7 @@ async function loadSingleEventResult(eventId) {
   </div>
   <div style="display:flex;gap:12px;margin-top:4px;">
     <button class="btn btn-primary" onclick="printResultTable('single-event-print-area','${esc(formatEventLabel(event))} — Result — BVM Sambhal')">🖨️ Print</button>
+    <button class="btn btn-secondary" onclick="exportTableToCsv('single-event-print-area','${esc(sanitizeFilename(formatEventLabel(event)))} Result.csv')">Export CSV</button>
   </div>
   <div class="result-confetti-layer" id="resultConfettiLayer"></div>`;
 

@@ -1714,7 +1714,31 @@ let allResults = [];
 let completedEventIds = new Set();
 let currentTheme = 'dark';
 let currentViewMode = 'icon';
-let currentSessionLabel = localStorage.getItem('bvm_session_label') || '2026-27';
+// Safe storage (avoids sandbox SecurityError when localStorage is blocked)
+const __memStore = Object.create(null);
+const safeStorage = {
+  getItem(key) {
+    try {
+      if(typeof window !== 'undefined' && window.localStorage) return window.localStorage.getItem(key);
+    } catch(e) {}
+    return Object.prototype.hasOwnProperty.call(__memStore, key) ? __memStore[key] : null;
+  },
+  setItem(key, value) {
+    const str = String(value);
+    try {
+      if(typeof window !== 'undefined' && window.localStorage) window.localStorage.setItem(key, str);
+    } catch(e) {}
+    __memStore[key] = str;
+  },
+  removeItem(key) {
+    try {
+      if(typeof window !== 'undefined' && window.localStorage) window.localStorage.removeItem(key);
+    } catch(e) {}
+    delete __memStore[key];
+  }
+};
+let currentSessionLabel = '2026-27';
+try { currentSessionLabel = safeStorage.getItem('bvm_session_label') || '2026-27'; } catch(e) {}
 if(currentSessionLabel === '2025-26') currentSessionLabel = '2026-27';
 let tempOpenResultEntries = [];
 let tempOpenResultEventId = null;
@@ -1722,8 +1746,152 @@ let isSavingResult = false;
 let currentOpenEventParticipants = [];
 let currentCertificateEntries = [];
 let certificateTemplateCache = null;
-let eventModeMemory = JSON.parse(localStorage.getItem('bvm_event_mode_memory') || '{}');
-let auditLogEntries = JSON.parse(localStorage.getItem('bvm_audit_log') || '[]');
+let eventModeMemory = {};
+try { eventModeMemory = JSON.parse(safeStorage.getItem('bvm_event_mode_memory') || '{}') || {}; } catch(e) { eventModeMemory = {}; }
+let auditLogEntries = [];
+try { auditLogEntries = JSON.parse(safeStorage.getItem('bvm_audit_log') || '[]') || []; } catch(e) { auditLogEntries = []; }
+
+// Chatbot state — declared early to avoid "before initialization" errors
+let chatHistory = [];
+let voiceEnabled = true;
+let recognition = null;
+let ttsVoices = [];
+const GROQ_API = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_MODEL = 'llama-3.1-8b-instant';
+const GROQ_KEY = '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';
+const GROQ_READY = !!(GROQ_KEY && GROQ_KEY.startsWith('gsk_') && GROQ_KEY.length > 20);
+
+// ── WhatsApp notifications (free click-to-chat + optional Cloud API) ──
+function loadWhatsAppSettings() {
+  try { return JSON.parse(safeStorage.getItem('bvm_whatsapp_settings') || '{}') || {}; }
+  catch(e) { return {}; }
+}
+function saveWhatsAppSettings(settings) {
+  safeStorage.setItem('bvm_whatsapp_settings', JSON.stringify(settings || {}));
+}
+function getWhatsAppSettings() {
+  const s = loadWhatsAppSettings();
+  return {
+    enabled: s.enabled !== false,
+    countryCode: String(s.countryCode || '91').replace(/\D/g, '') || '91',
+    groupLink: String(s.groupLink || '').trim(),
+    apiToken: String(s.apiToken || '').trim(),
+    phoneNumberId: String(s.phoneNumberId || '').trim(),
+    autoOpen: s.autoOpen !== false
+  };
+}
+function normalizeWhatsAppPhone(raw, countryCode = '91') {
+  let digits = String(raw || '').replace(/\D/g, '');
+  if(!digits) return '';
+  digits = digits.replace(/^0+/, '');
+  if(digits.length === 10 && countryCode) digits = countryCode + digits;
+  if(digits.length < 10 || digits.length > 15) return '';
+  return digits;
+}
+function buildParticipantWhatsAppMessage(action, student, eventLabel, houseName) {
+  const name = student.student_name || student.name || 'Student';
+  const cls = [student.class, student.section].filter(Boolean).join('-') || '—';
+  const adm = student.admission_no || '—';
+  const house = houseName || student.house || '—';
+  const event = eventLabel || student.event_name || 'Inter-House Event';
+  if(action === 'register') {
+    return `*Bal Vidya Mandir, Sambhal*\nInter-House Participation Confirmation\n\nDear Parent/Guardian,\n\n*${name}* (Adm: ${adm}, Class: ${cls}) from *${house}* has been *registered* for:\n📌 ${event}\n\nSession: ${currentSessionLabel}\nPlease ensure the student is prepared and present on time.\n\n— House Management System`;
+  }
+  return `*Bal Vidya Mandir, Sambhal*\nInter-House Participation Update\n\nDear Parent/Guardian,\n\n*${name}* (Adm: ${adm}, Class: ${cls}) from *${house}* has been *removed* from:\n📌 ${event}\n\nSession: ${currentSessionLabel}\n\n— House Management System`;
+}
+function buildGroupWhatsAppSummary(action, students, eventLabel, houseName) {
+  const lines = (students || []).map((s, i) => {
+    const name = s.student_name || s.name || 'Student';
+    const cls = [s.class, s.section].filter(Boolean).join('-') || '—';
+    return `${i + 1}. ${name} (${cls}) — ${s.admission_no || '—'}`;
+  });
+  const title = action === 'register' ? 'NEW REGISTRATIONS' : 'PARTICIPANTS REMOVED';
+  return `*BVM Sambhal — ${title}*\nEvent: ${eventLabel || '—'}\nHouse: ${houseName || '—'}\nCount: ${lines.length}\n\n${lines.join('\n')}\n\nSession: ${currentSessionLabel}`;
+}
+function openWhatsAppChat(phoneOrEmpty, message) {
+  const text = encodeURIComponent(message || '');
+  const phone = String(phoneOrEmpty || '').replace(/\D/g, '');
+  const url = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`;
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+async function sendWhatsAppCloudApi(phone, message, settings) {
+  if(!settings.apiToken || !settings.phoneNumberId || !phone) return { ok: false, reason: 'api_not_configured' };
+  try {
+    const resp = await fetch(`https://graph.facebook.com/v19.0/${settings.phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${settings.apiToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: phone,
+        type: 'text',
+        text: { body: message }
+      })
+    });
+    if(!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      return { ok: false, reason: err?.error?.message || `API ${resp.status}` };
+    }
+    return { ok: true };
+  } catch(e) {
+    return { ok: false, reason: e.message || 'network_error' };
+  }
+}
+async function notifyWhatsAppForParticipants(action, students, eventLabel, houseName) {
+  const settings = getWhatsAppSettings();
+  if(!settings.enabled) return;
+  const list = (students || []).filter(Boolean);
+  if(!list.length) return;
+
+  const groupMessage = buildGroupWhatsAppSummary(action, list, eventLabel, houseName);
+  let apiSent = 0;
+  let linkOpened = 0;
+
+  for(const student of list) {
+    const phone = normalizeWhatsAppPhone(student.contact_number || student.phone || '', settings.countryCode);
+    const msg = buildParticipantWhatsAppMessage(action, student, eventLabel, houseName);
+    if(!phone) continue;
+    if(settings.apiToken && settings.phoneNumberId) {
+      const result = await sendWhatsAppCloudApi(phone, msg, settings);
+      if(result.ok) { apiSent++; continue; }
+    }
+    if(settings.autoOpen) {
+      openWhatsAppChat(phone, msg);
+      linkOpened++;
+      await new Promise(r => setTimeout(r, 450));
+    }
+  }
+
+  if(settings.autoOpen) {
+    if(settings.groupLink) {
+      try { window.open(settings.groupLink, '_blank', 'noopener,noreferrer'); } catch(e) {}
+    }
+    // Opens WhatsApp contact/group picker with the summary text pre-filled
+    openWhatsAppChat('', groupMessage);
+  }
+
+  const parts = [];
+  if(apiSent) parts.push(`${apiSent} via API`);
+  if(linkOpened) parts.push(`${linkOpened} chat(s) opened`);
+  parts.push('group summary ready');
+  showToast(`WhatsApp: ${parts.join(' · ')}`, 'info');
+  addAuditLog(action === 'register' ? 'WhatsApp register notify' : 'WhatsApp delete notify', {
+    event: eventLabel, house: houseName, count: list.length, apiSent, linkOpened
+  });
+}
+function saveWhatsAppSettingsFromForm() {
+  saveWhatsAppSettings({
+    enabled: document.getElementById('waEnabled')?.checked !== false,
+    countryCode: document.getElementById('waCountryCode')?.value || '91',
+    groupLink: document.getElementById('waGroupLink')?.value || '',
+    apiToken: document.getElementById('waApiToken')?.value || '',
+    phoneNumberId: document.getElementById('waPhoneNumberId')?.value || '',
+    autoOpen: document.getElementById('waAutoOpen')?.checked !== false
+  });
+  showToast('WhatsApp settings saved', 'success');
+}
 
 function defaultHousePoints() {
   return {
@@ -1734,7 +1902,7 @@ function defaultHousePoints() {
   };
 }
 function persistEventModeMemory() {
-  localStorage.setItem('bvm_event_mode_memory', JSON.stringify(eventModeMemory));
+  safeStorage.setItem('bvm_event_mode_memory', JSON.stringify(eventModeMemory));
 }
 
 function getEventBaseMode(eventOrId, fallbackMode = 'no') {
@@ -1781,13 +1949,13 @@ function addAuditLog(action, details = {}) {
   };
   auditLogEntries.unshift(entry);
   auditLogEntries = auditLogEntries.slice(0, 500);
-  localStorage.setItem('bvm_audit_log', JSON.stringify(auditLogEntries));
+  safeStorage.setItem('bvm_audit_log', JSON.stringify(auditLogEntries));
 }
 
 function clearAuditLog() {
   if(!confirm('Clear audit log from this browser?')) return;
   auditLogEntries = [];
-  localStorage.setItem('bvm_audit_log', '[]');
+  safeStorage.setItem('bvm_audit_log', '[]');
   showDataTools();
   showToast('Audit log cleared', 'warning');
 }
@@ -1811,7 +1979,7 @@ function updateSwitcherButtons() {
 function applyTheme(theme) {
   currentTheme = theme === 'light' ? 'light' : 'dark';
   document.body.classList.toggle('light-theme', currentTheme === 'light');
-  localStorage.setItem('bvm_theme', currentTheme);
+  safeStorage.setItem('bvm_theme', currentTheme);
   updateSwitcherButtons();
 }
 
@@ -1819,7 +1987,7 @@ function applyViewMode(viewMode) {
   currentViewMode = viewMode === 'list' ? 'list' : 'icon';
   document.body.classList.toggle('view-list', currentViewMode === 'list');
   document.body.classList.toggle('view-icon', currentViewMode === 'icon');
-  localStorage.setItem('bvm_view_mode', currentViewMode);
+  safeStorage.setItem('bvm_view_mode', currentViewMode);
   updateSwitcherButtons();
 }
 
@@ -1884,8 +2052,8 @@ let isAdminLoggedIn = false;
 
 // ── INITIALIZATION ───────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
-  applyTheme(localStorage.getItem('bvm_theme') || 'dark');
-  applyViewMode(localStorage.getItem('bvm_view_mode') || 'icon');
+  applyTheme(safeStorage.getItem('bvm_theme') || 'dark');
+  applyViewMode(safeStorage.getItem('bvm_view_mode') || 'icon');
   applySessionLabel(currentSessionLabel);
   if (typeof supabase !== 'undefined') {
     db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -1897,7 +2065,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
 function applySessionLabel(label) {
   currentSessionLabel = label || '2026-27';
-  localStorage.setItem('bvm_session_label', currentSessionLabel);
+  safeStorage.setItem('bvm_session_label', currentSessionLabel);
   const pill = document.getElementById('sessionPill');
   if(pill) pill.textContent = `SESSION ${currentSessionLabel.replace('-', ' – ')}`;
   const badge = document.getElementById('topbarSessionBadge');
@@ -2534,9 +2702,11 @@ async function clearAllStudents() {
 }
 
 function showDataTools() {
-  const archives = JSON.parse(localStorage.getItem('bvm_session_archives') || '[]');
+  let archives = [];
+  try { archives = JSON.parse(safeStorage.getItem('bvm_session_archives') || '[]') || []; } catch(e) { archives = []; }
+  const wa = getWhatsAppSettings();
   document.getElementById('page-dynamic').innerHTML = `
-    <div class="page-header"><h1>Data Tools</h1><p>Admin-only reports, audit log, reset and session controls.</p></div>
+    <div class="page-header"><h1>Data Tools</h1><p>Admin-only reports, audit log, WhatsApp alerts, reset and session controls.</p></div>
     <div class="panel">
       <h3>Current Session</h3>
       <div class="alert alert-info">Active session: <strong>${esc(currentSessionLabel)}</strong></div>
@@ -2544,6 +2714,50 @@ function showDataTools() {
       <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:14px;">
         <button class="btn btn-danger" onclick="clearAllDataAndReset()">Clear All Data</button>
         <button class="btn btn-primary" onclick="startNextSession()">Change Session</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>📱 WhatsApp Notifications</h3>
+      <p style="font-size:13px; color:var(--muted); margin-bottom:14px;">
+        After <strong>Add Participant</strong> or <strong>Delete Participant</strong>, the system can open WhatsApp with a ready message for each student number and a group summary.
+        Fully automatic sending needs WhatsApp Cloud API (Meta). Without API, free click-to-chat is used (one tap to send).
+      </p>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Enable WhatsApp alerts</label>
+          <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;">
+            <input type="checkbox" id="waEnabled" ${wa.enabled ? 'checked' : ''}> Send alerts after add/delete participant
+          </label>
+        </div>
+        <div class="form-group">
+          <label>Auto-open WhatsApp chats</label>
+          <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;">
+            <input type="checkbox" id="waAutoOpen" ${wa.autoOpen ? 'checked' : ''}> Open chats automatically
+          </label>
+        </div>
+        <div class="form-group">
+          <label>Country code</label>
+          <input type="text" id="waCountryCode" value="${esc(wa.countryCode)}" placeholder="91">
+        </div>
+        <div class="form-group">
+          <label>WhatsApp Group invite link (optional)</label>
+          <input type="text" id="waGroupLink" value="${esc(wa.groupLink)}" placeholder="https://chat.whatsapp.com/......">
+        </div>
+        <div class="form-group">
+          <label>Cloud API Token (optional)</label>
+          <input type="password" id="waApiToken" value="${esc(wa.apiToken)}" placeholder="Leave blank for free click-to-chat">
+        </div>
+        <div class="form-group">
+          <label>Phone Number ID (optional, Cloud API)</label>
+          <input type="text" id="waPhoneNumberId" value="${esc(wa.phoneNumberId)}" placeholder="From Meta Developer Console">
+        </div>
+      </div>
+      <div class="alert alert-info" style="margin-top:12px;">
+        Student/parent numbers come from the <code>phone</code> / <code>contact_number</code> column in student data.
+        For the group: a summary message opens in WhatsApp — choose your house/staff group and send.
+      </div>
+      <div style="margin-top:14px;">
+        <button class="btn btn-success" onclick="saveWhatsAppSettingsFromForm()">Save WhatsApp Settings</button>
       </div>
     </div>
     <div class="panel">
@@ -2597,9 +2811,9 @@ async function startNextSession() {
     house_participants: (await db.from('house_participants').select('*')).data || [],
     results: (await db.from('results').select('*')).data || []
   };
-  const archives = JSON.parse(localStorage.getItem('bvm_session_archives') || '[]');
+  const archives = JSON.parse(safeStorage.getItem('bvm_session_archives') || '[]');
   archives.unshift(snapshot);
-  localStorage.setItem('bvm_session_archives', JSON.stringify(archives));
+  safeStorage.setItem('bvm_session_archives', JSON.stringify(archives));
   await clearAllDataAndReset();
   applySessionLabel(cleanSession);
   showDataTools();
@@ -3001,9 +3215,14 @@ async function registerParticipants() {
   
   addAuditLog('Registered participants', { event: eventName, house: currentHouse, count: ok });
   showToast(`✅ Registered ${ok} of ${selectedStudents.length} participants for "${eventName}" in ${isOpen ? 'Open' : 'House'} participants table`, 'success');
+  const notifiedStudents = selectedStudents.slice();
   selectedStudents = [];
   updateSelectedPool();
   await onEventChange();
+  if(ok > 0) {
+    try { await notifyWhatsAppForParticipants('register', notifiedStudents, eventName, currentHouse); }
+    catch(e) { console.error('WhatsApp notify error:', e); }
+  }
 }
 
 // ── EXCEL UPLOAD FUNCTIONS (Admin Only) ──────────────────────
@@ -3956,14 +4175,31 @@ async function doDeleteParticipant() {
   const names = selectedRows.map(row => row.student_name).join(', ');
   if(!confirm(`Delete ${selectedRows.length} participant(s): ${names}?`)) return;
   let deletedCount = 0;
+  const deletedForNotify = [];
   for(const row of selectedRows) {
     const { error } = await db.from(row.tableName).delete().eq('id', row.id);
-    if(!error) deletedCount++;
-    else console.error('delete participant error:', error);
+    if(!error) {
+      deletedCount++;
+      const linked = allStudents.find(s => admissionLookupKey(s.admission_no) === admissionLookupKey(row.admission_no)) || {};
+      deletedForNotify.push({
+        ...row,
+        contact_number: linked.contact_number || linked.phone || row.contact_number || row.phone || '',
+        phone: linked.phone || linked.contact_number || row.phone || '',
+        class: row.class || linked.class,
+        section: row.section || linked.section,
+        house: row.house || linked.house
+      });
+    } else console.error('delete participant error:', error);
   }
   document.getElementById('delStatus').innerHTML = `<div class="alert alert-success">Deleted ${deletedCount} participant(s).</div>`;
   showToast(`Deleted ${deletedCount} participant(s)`, 'success');
   await loadDeleteParticipants();
+  if(deletedCount > 0) {
+    const eventLabel = deletedForNotify[0]?.event_name || 'Event';
+    const houseName = currentHouse || deletedForNotify[0]?.house || '';
+    try { await notifyWhatsAppForParticipants('delete', deletedForNotify, eventLabel, houseName); }
+    catch(e) { console.error('WhatsApp notify error:', e); }
+  }
 }
 
 // ── RESULTS MANAGEMENT ───────────────────────────────────────
@@ -4813,10 +5049,9 @@ function waitMs(ms) {
 }
 
 if(window.speechSynthesis) {
-  resultSpeechVoices = window.speechSynthesis.getVoices() || [];
+  resultSpeechVoices = window.speechSynthesis.getVoices();
   window.speechSynthesis.onvoiceschanged = () => {
-    resultSpeechVoices = window.speechSynthesis.getVoices() || [];
-    if(typeof ttsVoices !== 'undefined') ttsVoices = resultSpeechVoices;
+    resultSpeechVoices = window.speechSynthesis.getVoices();
   };
 }
 
@@ -4970,48 +5205,18 @@ async function playCelebrationSounds(durationMs = 1200) {
   }
 }
 
-function pickIndianFemaleVoice(voices = []) {
-  if(!voices || !voices.length) {
-    try { voices = window.speechSynthesis ? (window.speechSynthesis.getVoices() || []) : []; } catch(e) { voices = []; }
-  }
-  if(!voices.length) return null;
-  const name = (v) => (v.name || '').toLowerCase();
-  const lang = (v) => (v.lang || '').toLowerCase();
-  const femaleNames = ['heera', 'neerja', 'kalpana', 'swara', 'aditi', 'veena', 'priya', 'ananya', 'isha', 'female', 'woman'];
-  const isFemaleName = (v) => femaleNames.some(n => name(v).includes(n));
-  const isMaleName = (v) => ['ravi', 'prabhat', 'madhur', 'male', 'man', 'david', 'mark'].some(n => name(v).includes(n));
-  return voices.find(v => (lang(v) === 'en-in' || lang(v).startsWith('en-in')) && isFemaleName(v) && !isMaleName(v))
-      || voices.find(v => (lang(v) === 'hi-in' || lang(v).startsWith('hi-in')) && isFemaleName(v) && !isMaleName(v))
-      || voices.find(v => (lang(v).includes('in') || name(v).includes('india') || name(v).includes('indian')) && isFemaleName(v) && !isMaleName(v))
-      || voices.find(v => lang(v) === 'en-in' && !isMaleName(v))
-      || voices.find(v => lang(v) === 'hi-in' && !isMaleName(v))
-      || voices.find(v => lang(v).startsWith('en-in'))
-      || voices.find(v => lang(v).startsWith('hi-in'))
-      || voices.find(v => lang(v).startsWith('en'))
-      || voices[0]
-      || null;
-}
-
-function getSharedSpeechVoices() {
-  const fromResult = resultSpeechVoices || [];
-  const fromChat = (typeof ttsVoices !== 'undefined' && ttsVoices) ? ttsVoices : [];
-  if(fromResult.length) return fromResult;
-  if(fromChat.length) return fromChat;
-  try { return window.speechSynthesis ? (window.speechSynthesis.getVoices() || []) : []; } catch(e) { return []; }
-}
-
 function getIndianAnnouncementVoice() {
-  return pickIndianFemaleVoice(getSharedSpeechVoices());
-}
-
-function applyIndianFemaleVoiceSettings(utter, voice) {
-  if(voice) utter.voice = voice;
-  utter.lang = voice?.lang || 'en-IN';
-  // Same settings for chatbot + result announcement
-  const isNamedFemale = voice && /heera|neerja|kalpana|swara|aditi|veena|priya|female/i.test(voice.name || '');
-  utter.rate = voice?.lang === 'hi-IN' || (voice?.lang || '').toLowerCase().startsWith('hi') ? 0.88 : 0.92;
-  utter.pitch = isNamedFemale ? 1.0 : 1.12;
-  utter.volume = 1;
+  let voices = [];
+  try {
+    voices = (typeof resultSpeechVoices !== 'undefined' && resultSpeechVoices && resultSpeechVoices.length)
+      ? resultSpeechVoices
+      : ((typeof ttsVoices !== 'undefined' && ttsVoices && ttsVoices.length) ? ttsVoices : (window.speechSynthesis.getVoices() || []));
+  } catch(e) {
+    try { voices = window.speechSynthesis.getVoices() || []; } catch(e2) { voices = []; }
+  }
+  // Same Indian female voice picker used by the chatbot
+  if(typeof pickIndianFemaleVoice === 'function') return pickIndianFemaleVoice(voices);
+  return voices.find(v => (v.lang || '') === 'en-IN') || voices.find(v => (v.lang || '').startsWith('en')) || voices[0] || null;
 }
 
 function speakResultAnnouncement(text) {
@@ -5033,7 +5238,11 @@ function speakResultAnnouncement(text) {
       window.speechSynthesis.cancel();
       const utter = new SpeechSynthesisUtterance(cleanText);
       const voice = getIndianAnnouncementVoice();
-      applyIndianFemaleVoiceSettings(utter, voice);
+      if(voice) utter.voice = voice;
+      utter.lang = voice?.lang || 'en-IN';
+      utter.rate = voice?.lang === 'hi-IN' ? 0.83 : 0.84;
+      utter.pitch = 0.96;
+      utter.volume = 1;
       utter.onstart = () => {
         if(token === resultSpeechToken) setResultHostSpeaking(true);
       };
@@ -5745,21 +5954,14 @@ async function showCertificateCenter() {
 // BVM AI CHATBOT + VOICE SYSTEM + AI AGENT
 // ════════════════════════════════════════════════════════════════
 
-const CLAUDE_API   = 'https://api.anthropic.com/v1/messages';
-const CLAUDE_MODEL = 'claude-sonnet-4-6';
-// ⚠️ Paste your Anthropic API key here — get one free at console.anthropic.com
-const CLAUDE_KEY   = 'YOUR_ANTHROPIC_API_KEY_HERE';
-
-let chatHistory  = [];
-let voiceEnabled = true;
-let recognition  = null;
-let ttsVoices    = [];
-
+// Groq config + chat state are declared earlier (near other globals) to avoid TDZ errors.
 if(window.speechSynthesis) {
-  ttsVoices = window.speechSynthesis.getVoices() || [];
+  try { ttsVoices = window.speechSynthesis.getVoices() || []; } catch(e) { ttsVoices = []; }
   window.speechSynthesis.onvoiceschanged = () => {
-    ttsVoices = window.speechSynthesis.getVoices() || [];
-    resultSpeechVoices = ttsVoices;
+    try {
+      ttsVoices = window.speechSynthesis.getVoices() || [];
+      if(typeof resultSpeechVoices !== 'undefined') resultSpeechVoices = ttsVoices;
+    } catch(e) {}
   };
 }
 
@@ -5833,94 +6035,112 @@ function scrollChat() {
 
 async function sendChat() {
   const input = document.getElementById('chat-input');
-  const text = (input.value||'').trim();
+  const text = (input.value || '').trim();
   if(!text) return;
   input.value = '';
   addUserMsg(text);
-  chatHistory.push({ role:'user', content:text });
+  if(!Array.isArray(chatHistory)) chatHistory = [];
+  chatHistory.push({ role: 'user', content: text });
   const tid = addBotMsg('⏳ Thinking…');
   try {
+    if(typeof GROQ_READY === 'undefined' || !GROQ_READY) {
+      updateBotMsg(tid, 'Groq API key is not configured.');
+      return;
+    }
     const reply = await runAgent(chatHistory.slice(-12));
-    chatHistory.push({ role:'assistant', content:reply });
+    chatHistory.push({ role: 'assistant', content: reply });
     updateBotMsg(tid, reply);
     if(voiceEnabled) speakText(reply);
   } catch(e) {
-    updateBotMsg(tid, '❌ ' + (e.message||'Could not connect. Check your API key.'));
+    updateBotMsg(tid, '❌ ' + (e.message || 'Could not connect to Groq.'));
     console.error('BVM Chat:', e);
   }
 }
 
 async function runAgent(history) {
-  const tools = [
-    { name:'get_leaderboard', description:'Get current house points and rankings', input_schema:{type:'object',properties:{},required:[]} },
-    { name:'get_events', description:'Get list of events', input_schema:{type:'object',properties:{filter:{type:'string',enum:['all','upcoming','passed','suspended']}},required:[]} },
-    { name:'get_students', description:'Search students', input_schema:{type:'object',properties:{house:{type:'string'},class:{type:'string'},search:{type:'string'}},required:[]} },
-    { name:'get_results', description:'Get all saved results', input_schema:{type:'object',properties:{},required:[]} },
-    { name:'add_event', description:'Add new event (admin must be logged in)', input_schema:{type:'object',properties:{event_name:{type:'string'},for_class:{type:'string'},event_date:{type:'string'},open:{type:'string',enum:['yes','no']},participants:{type:'string'}},required:['event_name']} },
-    { name:'navigate_to', description:'Navigate app to a page', input_schema:{type:'object',properties:{page:{type:'string',enum:['dashboard','addParticipant','eventsSettings','studentSettings','findEvent','scoreboard','allResults']}},required:['page']} }
+  const now = new Date();
+  const board = Object.entries(housePts || {}).sort((a, b) => b[1] - a[1])
+    .map(([h, p], i) => `${i + 1}. ${h}: ${p} pts`).join('\n') || 'No results yet';
+  const upcoming = (allEvents || []).filter(e => !isEventPassed(e, now) && e.open !== 'suspended')
+    .slice(0, 8).map(e => `• ${formatEventLabel(e)} (${e.event_date || 'TBD'})`).join('\n') || 'None';
+  const system = `${getBVMSystemPrompt()}
+
+LIVE LEADERBOARD:
+${board}
+
+UPCOMING EVENTS:
+${upcoming}
+
+Answer helpfully using this live data. Keep replies concise.`;
+
+  const messages = [
+    { role: 'system', content: system },
+    ...(history || []).map(m => ({ role: m.role, content: String(m.content || '') }))
   ];
 
-  async function execTool(name, inp) {
-    if(name==='get_leaderboard') return JSON.stringify(Object.entries(housePts||{}).sort((a,b)=>b[1]-a[1]).map(([h,p],i)=>({rank:i+1,house:h,points:p})));
-    if(name==='get_events') {
-      const now = new Date(); let list = [...allEvents];
-      if(inp.filter==='upcoming') list = list.filter(e=>!isEventPassed(e,now)&&e.open!=='suspended');
-      if(inp.filter==='passed')   list = list.filter(e=>isEventPassed(e,now));
-      if(inp.filter==='suspended') list = list.filter(e=>e.open==='suspended');
-      return JSON.stringify(list.slice(0,25).map(e=>({id:e.id,name:formatEventLabel(e),date:e.event_date,class:e.for_class,open:e.open,participants:e.participants})));
-    }
-    if(name==='get_students') {
-      let r = [...allStudents];
-      if(inp.house)  r = r.filter(s=>(s.house||'').toLowerCase().includes(inp.house.toLowerCase()));
-      if(inp.class)  r = r.filter(s=>String(s.class)===String(inp.class));
-      if(inp.search) r = r.filter(s=>(s.student_name||'').toLowerCase().includes(inp.search.toLowerCase())||String(s.admission_no).includes(inp.search));
-      return JSON.stringify(r.slice(0,30).map(s=>({name:s.student_name,adm:s.admission_no,class:s.class,section:s.section,house:s.house})));
-    }
-    if(name==='get_results') return JSON.stringify(allResults.slice(0,20).map(r=>({event:r.event_name,type:r.event_type,first:r.first_place,second:r.second_place,third:r.third_place})));
-    if(name==='add_event') {
-      if(!isAdminLoggedIn) return JSON.stringify({error:'Admin login required. Please login via Settings first.'});
-      const {error} = await db.from('events').insert([{event_name:inp.event_name,for_class:inp.for_class||'',event_date:inp.event_date||'',open:inp.open||'no',participants:inp.participants||'any'}]);
-      if(error) return JSON.stringify({error:error.message});
-      await loadEvents();
-      return JSON.stringify({success:true,msg:`Event "${inp.event_name}" added!`});
-    }
-    if(name==='navigate_to') {
-      const pm = {dashboard:'Dashboard',addParticipant:'Add Participant',eventsSettings:'Events Data',studentSettings:'Student Data',findEvent:'Find by Event',scoreboard:'Scoreboard',allResults:'All Results'};
-      showPage(inp.page, pm[inp.page]||inp.page);
-      return JSON.stringify({success:true});
-    }
-    return JSON.stringify({error:'Unknown tool'});
+  const resp = await fetch(GROQ_API, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${GROQ_KEY}`
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages,
+      temperature: 0.4,
+      max_tokens: 700
+    })
+  });
+
+  if(!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    if(resp.status === 429) throw new Error('Rate limit reached. Please wait a moment and try again.');
+    if(resp.status === 401) throw new Error('Invalid Groq API key.');
+    throw new Error(err?.error?.message || `Groq API error ${resp.status}`);
   }
 
-  let messages = [...history];
-  for(let i=0; i<5; i++) {
-    const resp = await fetch(CLAUDE_API, {
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':CLAUDE_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:CLAUDE_MODEL,max_tokens:700,system:getBVMSystemPrompt(),tools,messages})
-    });
-    if(!resp.ok) { const e=await resp.json().catch(()=>({})); throw new Error(e?.error?.message||`API error ${resp.status}`); }
-    const data = await resp.json();
-    if(data.stop_reason==='end_turn'||!data.content) return data.content?.find(c=>c.type==='text')?.text||'Done.';
-    if(data.stop_reason==='tool_use') {
-      messages.push({role:'assistant',content:data.content});
-      const results=[];
-      for(const b of data.content) { if(b.type==='tool_use') results.push({type:'tool_result',tool_use_id:b.id,content:await execTool(b.name,b.input||{})}); }
-      messages.push({role:'user',content:results});
-    } else { const t=data.content?.find(c=>c.type==='text')?.text; if(t) return t; break; }
-  }
-  return 'Request processed.';
+  const data = await resp.json();
+  const reply = data.choices?.[0]?.message?.content;
+  return (reply || 'Sorry, I could not generate a reply.').trim();
+}
+
+function pickIndianFemaleVoice(voices) {
+  try {
+    if(!voices || !voices.length) voices = window.speechSynthesis ? (window.speechSynthesis.getVoices() || []) : [];
+  } catch(e) { voices = []; }
+  if(!voices.length) return null;
+  const name = (v) => (v.name || '').toLowerCase();
+  const lang = (v) => (v.lang || '').toLowerCase();
+  const femaleNames = ['heera', 'neerja', 'kalpana', 'swara', 'aditi', 'veena', 'priya', 'ananya', 'isha', 'female', 'woman'];
+  const isFemaleName = (v) => femaleNames.some(n => name(v).includes(n));
+  const isMaleName = (v) => ['ravi', 'prabhat', 'madhur', 'male', 'man', 'david', 'mark'].some(n => name(v).includes(n));
+  return voices.find(v => (lang(v) === 'en-in' || lang(v).startsWith('en-in')) && isFemaleName(v) && !isMaleName(v))
+      || voices.find(v => (lang(v) === 'hi-in' || lang(v).startsWith('hi-in')) && isFemaleName(v) && !isMaleName(v))
+      || voices.find(v => (lang(v).includes('in') || name(v).includes('india')) && isFemaleName(v) && !isMaleName(v))
+      || voices.find(v => lang(v) === 'en-in' && !isMaleName(v))
+      || voices.find(v => lang(v) === 'hi-in' && !isMaleName(v))
+      || voices.find(v => lang(v).startsWith('en-in'))
+      || voices.find(v => lang(v).startsWith('hi-in'))
+      || voices.find(v => lang(v).startsWith('en'))
+      || voices[0]
+      || null;
 }
 
 function speakText(text) {
   if(!window.speechSynthesis || !voiceEnabled) return;
   window.speechSynthesis.cancel();
-  const clean = text.replace(/[*_#`~]/g, '').replace(/https?:\/\/\S+/g, '').trim().substring(0, 450);
+  const clean = String(text || '').replace(/[*_#`~]/g, '').replace(/https?:\/\/\S+/g, '').trim().substring(0, 450);
   if(!clean) return;
   const utt = new SpeechSynthesisUtterance(clean);
-  // Same Indian female voice used for result announcements
-  const voice = pickIndianFemaleVoice(getSharedSpeechVoices());
-  applyIndianFemaleVoiceSettings(utt, voice);
+  let list = [];
+  try { list = (ttsVoices && ttsVoices.length) ? ttsVoices : (window.speechSynthesis.getVoices() || []); } catch(e) { list = []; }
+  const voice = pickIndianFemaleVoice(list);
+  if(voice) utt.voice = voice;
+  utt.lang = voice?.lang || 'en-IN';
+  const isNamedFemale = voice && /heera|neerja|kalpana|swara|aditi|veena|priya|female/i.test(voice.name || '');
+  utt.rate = 0.92;
+  utt.pitch = isNamedFemale ? 1.0 : 1.12;
+  utt.volume = 1;
   window.speechSynthesis.speak(utt);
 }
 

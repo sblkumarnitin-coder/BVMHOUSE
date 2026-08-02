@@ -4813,9 +4813,10 @@ function waitMs(ms) {
 }
 
 if(window.speechSynthesis) {
-  resultSpeechVoices = window.speechSynthesis.getVoices();
+  resultSpeechVoices = window.speechSynthesis.getVoices() || [];
   window.speechSynthesis.onvoiceschanged = () => {
-    resultSpeechVoices = window.speechSynthesis.getVoices();
+    resultSpeechVoices = window.speechSynthesis.getVoices() || [];
+    if(typeof ttsVoices !== 'undefined') ttsVoices = resultSpeechVoices;
   };
 }
 
@@ -4969,18 +4970,48 @@ async function playCelebrationSounds(durationMs = 1200) {
   }
 }
 
-function getIndianAnnouncementVoice() {
-  const voices = resultSpeechVoices || [];
-  const byName = (...parts) => voices.find(v => parts.some(p => (v.name || '').toLowerCase().includes(p)));
-  return byName('madhur')
-      || byName('india', 'indian', 'heera', 'kalpana', 'swara', 'aditi', 'prabhat')
-      || voices.find(v => v.lang === 'en-IN')
-      || voices.find(v => v.lang === 'hi-IN')
-      || voices.find(v => (v.lang || '').startsWith('en-IN'))
-      || voices.find(v => (v.lang || '').startsWith('hi-IN'))
-      || voices.find(v => (v.lang || '').startsWith('hi'))
-      || voices.find(v => (v.lang || '').startsWith('en'))
+function pickIndianFemaleVoice(voices = []) {
+  if(!voices || !voices.length) {
+    try { voices = window.speechSynthesis ? (window.speechSynthesis.getVoices() || []) : []; } catch(e) { voices = []; }
+  }
+  if(!voices.length) return null;
+  const name = (v) => (v.name || '').toLowerCase();
+  const lang = (v) => (v.lang || '').toLowerCase();
+  const femaleNames = ['heera', 'neerja', 'kalpana', 'swara', 'aditi', 'veena', 'priya', 'ananya', 'isha', 'female', 'woman'];
+  const isFemaleName = (v) => femaleNames.some(n => name(v).includes(n));
+  const isMaleName = (v) => ['ravi', 'prabhat', 'madhur', 'male', 'man', 'david', 'mark'].some(n => name(v).includes(n));
+  return voices.find(v => (lang(v) === 'en-in' || lang(v).startsWith('en-in')) && isFemaleName(v) && !isMaleName(v))
+      || voices.find(v => (lang(v) === 'hi-in' || lang(v).startsWith('hi-in')) && isFemaleName(v) && !isMaleName(v))
+      || voices.find(v => (lang(v).includes('in') || name(v).includes('india') || name(v).includes('indian')) && isFemaleName(v) && !isMaleName(v))
+      || voices.find(v => lang(v) === 'en-in' && !isMaleName(v))
+      || voices.find(v => lang(v) === 'hi-in' && !isMaleName(v))
+      || voices.find(v => lang(v).startsWith('en-in'))
+      || voices.find(v => lang(v).startsWith('hi-in'))
+      || voices.find(v => lang(v).startsWith('en'))
+      || voices[0]
       || null;
+}
+
+function getSharedSpeechVoices() {
+  const fromResult = resultSpeechVoices || [];
+  const fromChat = (typeof ttsVoices !== 'undefined' && ttsVoices) ? ttsVoices : [];
+  if(fromResult.length) return fromResult;
+  if(fromChat.length) return fromChat;
+  try { return window.speechSynthesis ? (window.speechSynthesis.getVoices() || []) : []; } catch(e) { return []; }
+}
+
+function getIndianAnnouncementVoice() {
+  return pickIndianFemaleVoice(getSharedSpeechVoices());
+}
+
+function applyIndianFemaleVoiceSettings(utter, voice) {
+  if(voice) utter.voice = voice;
+  utter.lang = voice?.lang || 'en-IN';
+  // Same settings for chatbot + result announcement
+  const isNamedFemale = voice && /heera|neerja|kalpana|swara|aditi|veena|priya|female/i.test(voice.name || '');
+  utter.rate = voice?.lang === 'hi-IN' || (voice?.lang || '').toLowerCase().startsWith('hi') ? 0.88 : 0.92;
+  utter.pitch = isNamedFemale ? 1.0 : 1.12;
+  utter.volume = 1;
 }
 
 function speakResultAnnouncement(text) {
@@ -5002,11 +5033,7 @@ function speakResultAnnouncement(text) {
       window.speechSynthesis.cancel();
       const utter = new SpeechSynthesisUtterance(cleanText);
       const voice = getIndianAnnouncementVoice();
-      if(voice) utter.voice = voice;
-      utter.lang = voice?.lang || 'en-IN';
-      utter.rate = voice?.lang === 'hi-IN' ? 0.83 : 0.84;
-      utter.pitch = 0.96;
-      utter.volume = 1;
+      applyIndianFemaleVoiceSettings(utter, voice);
       utter.onstart = () => {
         if(token === resultSpeechToken) setResultHostSpeaking(true);
       };
@@ -5729,7 +5756,11 @@ let recognition  = null;
 let ttsVoices    = [];
 
 if(window.speechSynthesis) {
-  window.speechSynthesis.onvoiceschanged = () => { ttsVoices = window.speechSynthesis.getVoices(); };
+  ttsVoices = window.speechSynthesis.getVoices() || [];
+  window.speechSynthesis.onvoiceschanged = () => {
+    ttsVoices = window.speechSynthesis.getVoices() || [];
+    resultSpeechVoices = ttsVoices;
+  };
 }
 
 function getBVMSystemPrompt() {
@@ -5882,14 +5913,14 @@ async function runAgent(history) {
 }
 
 function speakText(text) {
-  if(!window.speechSynthesis||!voiceEnabled) return;
+  if(!window.speechSynthesis || !voiceEnabled) return;
   window.speechSynthesis.cancel();
-  const clean = text.replace(/[*_#`~]/g,'').replace(/https?:\/\/\S+/g,'').trim().substring(0,450);
+  const clean = text.replace(/[*_#`~]/g, '').replace(/https?:\/\/\S+/g, '').trim().substring(0, 450);
   if(!clean) return;
   const utt = new SpeechSynthesisUtterance(clean);
-  const v = ttsVoices.find(v=>v.lang==='en-IN')||ttsVoices.find(v=>v.lang.startsWith('en'))||ttsVoices[0];
-  if(v) utt.voice = v;
-  utt.lang='en-IN'; utt.rate=0.93; utt.pitch=1.05; utt.volume=1;
+  // Same Indian female voice used for result announcements
+  const voice = pickIndianFemaleVoice(getSharedSpeechVoices());
+  applyIndianFemaleVoiceSettings(utt, voice);
   window.speechSynthesis.speak(utt);
 }
 

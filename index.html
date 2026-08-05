@@ -1698,6 +1698,19 @@ const HOUSE_META = {
   vishwas: { name: 'Vishwas House', color: '#f2c94c', cls: 'vishwas', img: 'https://ik.imagekit.io/flr6iuzhm/vishwas.jpg?updatedAt=1755956347586', logoPosition: 'center' }
 };
 
+
+// Safe storage (avoids SecurityError in sandboxed iframes)
+const safeStorage = (() => {
+  let mem = {};
+  let ok = false;
+  try { const t='__bvm__'; safeStorage.setItem(t,'1'); safeStorage.removeItem(t); ok = true; } catch(e) {}
+  return {
+    getItem(k){ try { return ok ? safeStorage.getItem(k) : (mem[k] ?? null); } catch(e){ return mem[k] ?? null; } },
+    setItem(k,v){ try { if(ok) safeStorage.setItem(k,v); else mem[k]=String(v); } catch(e){ mem[k]=String(v); } },
+    removeItem(k){ try { if(ok) safeStorage.removeItem(k); else delete mem[k]; } catch(e){ delete mem[k]; } }
+  };
+})();
+
 let db = null;
 let currentHouse = null;
 let allStudents = [];
@@ -1714,31 +1727,7 @@ let allResults = [];
 let completedEventIds = new Set();
 let currentTheme = 'dark';
 let currentViewMode = 'icon';
-// Safe storage (avoids sandbox SecurityError when localStorage is blocked)
-const __memStore = Object.create(null);
-const safeStorage = {
-  getItem(key) {
-    try {
-      if(typeof window !== 'undefined' && window.localStorage) return window.localStorage.getItem(key);
-    } catch(e) {}
-    return Object.prototype.hasOwnProperty.call(__memStore, key) ? __memStore[key] : null;
-  },
-  setItem(key, value) {
-    const str = String(value);
-    try {
-      if(typeof window !== 'undefined' && window.localStorage) window.localStorage.setItem(key, str);
-    } catch(e) {}
-    __memStore[key] = str;
-  },
-  removeItem(key) {
-    try {
-      if(typeof window !== 'undefined' && window.localStorage) window.localStorage.removeItem(key);
-    } catch(e) {}
-    delete __memStore[key];
-  }
-};
-let currentSessionLabel = '2026-27';
-try { currentSessionLabel = safeStorage.getItem('bvm_session_label') || '2026-27'; } catch(e) {}
+let currentSessionLabel = safeStorage.getItem('bvm_session_label') || '2026-27';
 if(currentSessionLabel === '2025-26') currentSessionLabel = '2026-27';
 let tempOpenResultEntries = [];
 let tempOpenResultEventId = null;
@@ -1746,152 +1735,8 @@ let isSavingResult = false;
 let currentOpenEventParticipants = [];
 let currentCertificateEntries = [];
 let certificateTemplateCache = null;
-let eventModeMemory = {};
-try { eventModeMemory = JSON.parse(safeStorage.getItem('bvm_event_mode_memory') || '{}') || {}; } catch(e) { eventModeMemory = {}; }
-let auditLogEntries = [];
-try { auditLogEntries = JSON.parse(safeStorage.getItem('bvm_audit_log') || '[]') || []; } catch(e) { auditLogEntries = []; }
-
-// Chatbot state — declared early to avoid "before initialization" errors
-let chatHistory = [];
-let voiceEnabled = true;
-let recognition = null;
-let ttsVoices = [];
-const GROQ_API = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_MODEL = 'llama-3.1-8b-instant';
-const GROQ_KEY = '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';
-const GROQ_READY = !!(GROQ_KEY && GROQ_KEY.startsWith('gsk_') && GROQ_KEY.length > 20);
-
-// ── WhatsApp notifications (free click-to-chat + optional Cloud API) ──
-function loadWhatsAppSettings() {
-  try { return JSON.parse(safeStorage.getItem('bvm_whatsapp_settings') || '{}') || {}; }
-  catch(e) { return {}; }
-}
-function saveWhatsAppSettings(settings) {
-  safeStorage.setItem('bvm_whatsapp_settings', JSON.stringify(settings || {}));
-}
-function getWhatsAppSettings() {
-  const s = loadWhatsAppSettings();
-  return {
-    enabled: s.enabled !== false,
-    countryCode: String(s.countryCode || '91').replace(/\D/g, '') || '91',
-    groupLink: String(s.groupLink || '').trim(),
-    apiToken: String(s.apiToken || '').trim(),
-    phoneNumberId: String(s.phoneNumberId || '').trim(),
-    autoOpen: s.autoOpen !== false
-  };
-}
-function normalizeWhatsAppPhone(raw, countryCode = '91') {
-  let digits = String(raw || '').replace(/\D/g, '');
-  if(!digits) return '';
-  digits = digits.replace(/^0+/, '');
-  if(digits.length === 10 && countryCode) digits = countryCode + digits;
-  if(digits.length < 10 || digits.length > 15) return '';
-  return digits;
-}
-function buildParticipantWhatsAppMessage(action, student, eventLabel, houseName) {
-  const name = student.student_name || student.name || 'Student';
-  const cls = [student.class, student.section].filter(Boolean).join('-') || '—';
-  const adm = student.admission_no || '—';
-  const house = houseName || student.house || '—';
-  const event = eventLabel || student.event_name || 'Inter-House Event';
-  if(action === 'register') {
-    return `*Bal Vidya Mandir, Sambhal*\nInter-House Participation Confirmation\n\nDear Parent/Guardian,\n\n*${name}* (Adm: ${adm}, Class: ${cls}) from *${house}* has been *registered* for:\n📌 ${event}\n\nSession: ${currentSessionLabel}\nPlease ensure the student is prepared and present on time.\n\n— House Management System`;
-  }
-  return `*Bal Vidya Mandir, Sambhal*\nInter-House Participation Update\n\nDear Parent/Guardian,\n\n*${name}* (Adm: ${adm}, Class: ${cls}) from *${house}* has been *removed* from:\n📌 ${event}\n\nSession: ${currentSessionLabel}\n\n— House Management System`;
-}
-function buildGroupWhatsAppSummary(action, students, eventLabel, houseName) {
-  const lines = (students || []).map((s, i) => {
-    const name = s.student_name || s.name || 'Student';
-    const cls = [s.class, s.section].filter(Boolean).join('-') || '—';
-    return `${i + 1}. ${name} (${cls}) — ${s.admission_no || '—'}`;
-  });
-  const title = action === 'register' ? 'NEW REGISTRATIONS' : 'PARTICIPANTS REMOVED';
-  return `*BVM Sambhal — ${title}*\nEvent: ${eventLabel || '—'}\nHouse: ${houseName || '—'}\nCount: ${lines.length}\n\n${lines.join('\n')}\n\nSession: ${currentSessionLabel}`;
-}
-function openWhatsAppChat(phoneOrEmpty, message) {
-  const text = encodeURIComponent(message || '');
-  const phone = String(phoneOrEmpty || '').replace(/\D/g, '');
-  const url = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`;
-  window.open(url, '_blank', 'noopener,noreferrer');
-}
-async function sendWhatsAppCloudApi(phone, message, settings) {
-  if(!settings.apiToken || !settings.phoneNumberId || !phone) return { ok: false, reason: 'api_not_configured' };
-  try {
-    const resp = await fetch(`https://graph.facebook.com/v19.0/${settings.phoneNumberId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${settings.apiToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: phone,
-        type: 'text',
-        text: { body: message }
-      })
-    });
-    if(!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      return { ok: false, reason: err?.error?.message || `API ${resp.status}` };
-    }
-    return { ok: true };
-  } catch(e) {
-    return { ok: false, reason: e.message || 'network_error' };
-  }
-}
-async function notifyWhatsAppForParticipants(action, students, eventLabel, houseName) {
-  const settings = getWhatsAppSettings();
-  if(!settings.enabled) return;
-  const list = (students || []).filter(Boolean);
-  if(!list.length) return;
-
-  const groupMessage = buildGroupWhatsAppSummary(action, list, eventLabel, houseName);
-  let apiSent = 0;
-  let linkOpened = 0;
-
-  for(const student of list) {
-    const phone = normalizeWhatsAppPhone(student.contact_number || student.phone || '', settings.countryCode);
-    const msg = buildParticipantWhatsAppMessage(action, student, eventLabel, houseName);
-    if(!phone) continue;
-    if(settings.apiToken && settings.phoneNumberId) {
-      const result = await sendWhatsAppCloudApi(phone, msg, settings);
-      if(result.ok) { apiSent++; continue; }
-    }
-    if(settings.autoOpen) {
-      openWhatsAppChat(phone, msg);
-      linkOpened++;
-      await new Promise(r => setTimeout(r, 450));
-    }
-  }
-
-  if(settings.autoOpen) {
-    if(settings.groupLink) {
-      try { window.open(settings.groupLink, '_blank', 'noopener,noreferrer'); } catch(e) {}
-    }
-    // Opens WhatsApp contact/group picker with the summary text pre-filled
-    openWhatsAppChat('', groupMessage);
-  }
-
-  const parts = [];
-  if(apiSent) parts.push(`${apiSent} via API`);
-  if(linkOpened) parts.push(`${linkOpened} chat(s) opened`);
-  parts.push('group summary ready');
-  showToast(`WhatsApp: ${parts.join(' · ')}`, 'info');
-  addAuditLog(action === 'register' ? 'WhatsApp register notify' : 'WhatsApp delete notify', {
-    event: eventLabel, house: houseName, count: list.length, apiSent, linkOpened
-  });
-}
-function saveWhatsAppSettingsFromForm() {
-  saveWhatsAppSettings({
-    enabled: document.getElementById('waEnabled')?.checked !== false,
-    countryCode: document.getElementById('waCountryCode')?.value || '91',
-    groupLink: document.getElementById('waGroupLink')?.value || '',
-    apiToken: document.getElementById('waApiToken')?.value || '',
-    phoneNumberId: document.getElementById('waPhoneNumberId')?.value || '',
-    autoOpen: document.getElementById('waAutoOpen')?.checked !== false
-  });
-  showToast('WhatsApp settings saved', 'success');
-}
+let eventModeMemory = JSON.parse(safeStorage.getItem('bvm_event_mode_memory') || '{}');
+let auditLogEntries = JSON.parse(safeStorage.getItem('bvm_audit_log') || '[]');
 
 function defaultHousePoints() {
   return {
@@ -2058,7 +1903,7 @@ window.addEventListener('DOMContentLoaded', () => {
   if (typeof supabase !== 'undefined') {
     db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     loadStudents();
-    loadEvents();
+    loadEvents(); // loadEvents also calls loadResults → housePts
   }
   renderLeaderboard();
 });
@@ -2702,11 +2547,9 @@ async function clearAllStudents() {
 }
 
 function showDataTools() {
-  let archives = [];
-  try { archives = JSON.parse(safeStorage.getItem('bvm_session_archives') || '[]') || []; } catch(e) { archives = []; }
-  const wa = getWhatsAppSettings();
+  const archives = JSON.parse(safeStorage.getItem('bvm_session_archives') || '[]');
   document.getElementById('page-dynamic').innerHTML = `
-    <div class="page-header"><h1>Data Tools</h1><p>Admin-only reports, audit log, WhatsApp alerts, reset and session controls.</p></div>
+    <div class="page-header"><h1>Data Tools</h1><p>Admin-only reports, audit log, reset and session controls.</p></div>
     <div class="panel">
       <h3>Current Session</h3>
       <div class="alert alert-info">Active session: <strong>${esc(currentSessionLabel)}</strong></div>
@@ -2714,50 +2557,6 @@ function showDataTools() {
       <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:14px;">
         <button class="btn btn-danger" onclick="clearAllDataAndReset()">Clear All Data</button>
         <button class="btn btn-primary" onclick="startNextSession()">Change Session</button>
-      </div>
-    </div>
-    <div class="panel">
-      <h3>📱 WhatsApp Notifications</h3>
-      <p style="font-size:13px; color:var(--muted); margin-bottom:14px;">
-        After <strong>Add Participant</strong> or <strong>Delete Participant</strong>, the system can open WhatsApp with a ready message for each student number and a group summary.
-        Fully automatic sending needs WhatsApp Cloud API (Meta). Without API, free click-to-chat is used (one tap to send).
-      </p>
-      <div class="form-grid">
-        <div class="form-group">
-          <label>Enable WhatsApp alerts</label>
-          <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;">
-            <input type="checkbox" id="waEnabled" ${wa.enabled ? 'checked' : ''}> Send alerts after add/delete participant
-          </label>
-        </div>
-        <div class="form-group">
-          <label>Auto-open WhatsApp chats</label>
-          <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;">
-            <input type="checkbox" id="waAutoOpen" ${wa.autoOpen ? 'checked' : ''}> Open chats automatically
-          </label>
-        </div>
-        <div class="form-group">
-          <label>Country code</label>
-          <input type="text" id="waCountryCode" value="${esc(wa.countryCode)}" placeholder="91">
-        </div>
-        <div class="form-group">
-          <label>WhatsApp Group invite link (optional)</label>
-          <input type="text" id="waGroupLink" value="${esc(wa.groupLink)}" placeholder="https://chat.whatsapp.com/......">
-        </div>
-        <div class="form-group">
-          <label>Cloud API Token (optional)</label>
-          <input type="password" id="waApiToken" value="${esc(wa.apiToken)}" placeholder="Leave blank for free click-to-chat">
-        </div>
-        <div class="form-group">
-          <label>Phone Number ID (optional, Cloud API)</label>
-          <input type="text" id="waPhoneNumberId" value="${esc(wa.phoneNumberId)}" placeholder="From Meta Developer Console">
-        </div>
-      </div>
-      <div class="alert alert-info" style="margin-top:12px;">
-        Student/parent numbers come from the <code>phone</code> / <code>contact_number</code> column in student data.
-        For the group: a summary message opens in WhatsApp — choose your house/staff group and send.
-      </div>
-      <div style="margin-top:14px;">
-        <button class="btn btn-success" onclick="saveWhatsAppSettingsFromForm()">Save WhatsApp Settings</button>
       </div>
     </div>
     <div class="panel">
@@ -3215,14 +3014,9 @@ async function registerParticipants() {
   
   addAuditLog('Registered participants', { event: eventName, house: currentHouse, count: ok });
   showToast(`✅ Registered ${ok} of ${selectedStudents.length} participants for "${eventName}" in ${isOpen ? 'Open' : 'House'} participants table`, 'success');
-  const notifiedStudents = selectedStudents.slice();
   selectedStudents = [];
   updateSelectedPool();
   await onEventChange();
-  if(ok > 0) {
-    try { await notifyWhatsAppForParticipants('register', notifiedStudents, eventName, currentHouse); }
-    catch(e) { console.error('WhatsApp notify error:', e); }
-  }
 }
 
 // ── EXCEL UPLOAD FUNCTIONS (Admin Only) ──────────────────────
@@ -4175,31 +3969,14 @@ async function doDeleteParticipant() {
   const names = selectedRows.map(row => row.student_name).join(', ');
   if(!confirm(`Delete ${selectedRows.length} participant(s): ${names}?`)) return;
   let deletedCount = 0;
-  const deletedForNotify = [];
   for(const row of selectedRows) {
     const { error } = await db.from(row.tableName).delete().eq('id', row.id);
-    if(!error) {
-      deletedCount++;
-      const linked = allStudents.find(s => admissionLookupKey(s.admission_no) === admissionLookupKey(row.admission_no)) || {};
-      deletedForNotify.push({
-        ...row,
-        contact_number: linked.contact_number || linked.phone || row.contact_number || row.phone || '',
-        phone: linked.phone || linked.contact_number || row.phone || '',
-        class: row.class || linked.class,
-        section: row.section || linked.section,
-        house: row.house || linked.house
-      });
-    } else console.error('delete participant error:', error);
+    if(!error) deletedCount++;
+    else console.error('delete participant error:', error);
   }
   document.getElementById('delStatus').innerHTML = `<div class="alert alert-success">Deleted ${deletedCount} participant(s).</div>`;
   showToast(`Deleted ${deletedCount} participant(s)`, 'success');
   await loadDeleteParticipants();
-  if(deletedCount > 0) {
-    const eventLabel = deletedForNotify[0]?.event_name || 'Event';
-    const houseName = currentHouse || deletedForNotify[0]?.house || '';
-    try { await notifyWhatsAppForParticipants('delete', deletedForNotify, eventLabel, houseName); }
-    catch(e) { console.error('WhatsApp notify error:', e); }
-  }
 }
 
 // ── RESULTS MANAGEMENT ───────────────────────────────────────
@@ -5206,17 +4983,30 @@ async function playCelebrationSounds(durationMs = 1200) {
 }
 
 function getIndianAnnouncementVoice() {
-  let voices = [];
-  try {
-    voices = (typeof resultSpeechVoices !== 'undefined' && resultSpeechVoices && resultSpeechVoices.length)
-      ? resultSpeechVoices
-      : ((typeof ttsVoices !== 'undefined' && ttsVoices && ttsVoices.length) ? ttsVoices : (window.speechSynthesis.getVoices() || []));
-  } catch(e) {
-    try { voices = window.speechSynthesis.getVoices() || []; } catch(e2) { voices = []; }
+  // Prefer soft Indian girl voice (same as chatbot) — never Madhur/Ravi/Prabhat
+  if (typeof pickIndianFemaleVoice === 'function') {
+    // Ensure voice list is fresh
+    try {
+      if (window.speechSynthesis) {
+        const all = window.speechSynthesis.getVoices();
+        if (all && all.length) {
+          if (typeof ttsVoices !== 'undefined') ttsVoices = all;
+          resultSpeechVoices = all;
+        }
+      }
+    } catch (e) {}
+    const soft = pickIndianFemaleVoice();
+    if (soft) return soft;
   }
-  // Same Indian female voice picker used by the chatbot
-  if(typeof pickIndianFemaleVoice === 'function') return pickIndianFemaleVoice(voices);
-  return voices.find(v => (v.lang || '') === 'en-IN') || voices.find(v => (v.lang || '').startsWith('en')) || voices[0] || null;
+  const voices = resultSpeechVoices || (window.speechSynthesis ? window.speechSynthesis.getVoices() : []) || [];
+  const maleHints = /madhur|ravi|prabhat|hemant|male|david|mark|ryan/i;
+  const softNames = /heera|neerja|kalpana|swara|aditi|veena|raveena|sonia|zira|aria|jenny/i;
+  return voices.find(v => softNames.test(v.name || '') && !maleHints.test(v.name || ''))
+      || voices.find(v => (v.lang === 'en-IN' || v.lang === 'hi-IN') && !maleHints.test(v.name || ''))
+      || voices.find(v => (v.lang || '').startsWith('en-IN'))
+      || voices.find(v => (v.lang || '').startsWith('hi'))
+      || voices.find(v => (v.lang || '').startsWith('en') && !maleHints.test(v.name || ''))
+      || null;
 }
 
 function speakResultAnnouncement(text) {
@@ -5237,12 +5027,16 @@ function speakResultAnnouncement(text) {
       };
       window.speechSynthesis.cancel();
       const utter = new SpeechSynthesisUtterance(cleanText);
-      const voice = getIndianAnnouncementVoice();
-      if(voice) utter.voice = voice;
-      utter.lang = voice?.lang || 'en-IN';
-      utter.rate = voice?.lang === 'hi-IN' ? 0.83 : 0.84;
-      utter.pitch = 0.96;
-      utter.volume = 1;
+      if (typeof applyIndianFemaleVoice === 'function') {
+        applyIndianFemaleVoice(utter);
+      } else {
+        const voice = getIndianAnnouncementVoice();
+        if(voice) utter.voice = voice;
+        utter.lang = voice?.lang || 'en-IN';
+        utter.rate = 0.86;
+        utter.pitch = 1.22;
+        utter.volume = 0.92;
+      }
       utter.onstart = () => {
         if(token === resultSpeechToken) setResultHostSpeaking(true);
       };
@@ -5951,58 +5745,238 @@ async function showCertificateCenter() {
 }
 
 // ════════════════════════════════════════════════════════════════
-// BVM AI CHATBOT + VOICE SYSTEM + AI AGENT
+// BVM AI CHATBOT + VOICE SYSTEM + AI AGENT  (DB-first + Groq)
 // ════════════════════════════════════════════════════════════════
 
-// Groq config + chat state are declared earlier (near other globals) to avoid TDZ errors.
-if(window.speechSynthesis) {
-  try { ttsVoices = window.speechSynthesis.getVoices() || []; } catch(e) { ttsVoices = []; }
-  window.speechSynthesis.onvoiceschanged = () => {
-    try {
-      ttsVoices = window.speechSynthesis.getVoices() || [];
-      if(typeof resultSpeechVoices !== 'undefined') resultSpeechVoices = ttsVoices;
-    } catch(e) {}
+const GROQ_API   = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_MODEL = 'llama-3.1-8b-instant';
+// Paste your Groq key here (console.groq.com)
+const GROQ_KEY   = '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';
+const GROQ_READY = !!(GROQ_KEY && GROQ_KEY.startsWith('gsk_') && GROQ_KEY.length > 20);
+
+let chatHistory  = [];
+let voiceEnabled = true;
+let recognition  = null;
+let ttsVoices    = [];
+
+if (window.speechSynthesis) {
+  window.speechSynthesis.onvoiceschanged = () => { ttsVoices = window.speechSynthesis.getVoices(); };
+  try { ttsVoices = window.speechSynthesis.getVoices(); } catch (e) {}
+}
+
+/** Soft Indian girl voice — shared by chatbot + result announcements */
+function pickIndianFemaleVoice() {
+  const voices = (ttsVoices && ttsVoices.length)
+    ? ttsVoices
+    : (window.speechSynthesis ? window.speechSynthesis.getVoices() : []);
+  if (!voices.length) return null;
+
+  const maleHints = /madhur|ravi|prabhat|hemant|male|david|mark|ryan|george|james|thomas|microsoft david|google uk english male/i;
+  // Soft / young female Indian voices first (priority order)
+  const softGirlNames = [
+    'heera', 'neerja', 'kalpana', 'swara', 'aditi', 'veena', 'raveena',
+    'sonia', 'zira', 'aria', 'jenny', 'sara', 'samantha', 'karen',
+    'female', 'google हिन्दी', 'google hindi'
+  ];
+  const isMale = (v) => maleHints.test(v.name || '');
+  const lang = (v) => String(v.lang || '').toLowerCase();
+
+  // 1) Exact soft Indian girl names
+  for (const name of softGirlNames) {
+    const v = voices.find(x => (x.name || '').toLowerCase().includes(name) && !isMale(x));
+    if (v) return v;
+  }
+  // 2) en-IN / hi-IN female-ish (not male)
+  let v = voices.find(x => (lang(x) === 'en-in' || lang(x) === 'hi-in' || lang(x).startsWith('hi')) && !isMale(x));
+  if (v) return v;
+  // 3) Any en-IN even if gender unknown
+  v = voices.find(x => lang(x).startsWith('en-in'));
+  if (v && !isMale(v)) return v;
+  // 4) Soft English female fallbacks
+  v = voices.find(x => /zira|aria|jenny|sara|samantha|karen|female/i.test(x.name || '') && !isMale(x));
+  if (v) return v;
+  // 5) Any English non-male
+  v = voices.find(x => lang(x).startsWith('en') && !isMale(x));
+  if (v) return v;
+  return voices.find(x => !isMale(x)) || voices[0];
+}
+
+/** Soft, gentle girl-like speech settings */
+function applyIndianFemaleVoice(utt) {
+  const v = pickIndianFemaleVoice();
+  if (v) utt.voice = v;
+  utt.lang = (v && v.lang) ? v.lang : 'en-IN';
+  // Softer: slower pace + slightly higher pitch (younger / girl-like)
+  utt.rate = 0.86;
+  utt.pitch = 1.22;
+  utt.volume = 0.92;
+}
+
+/** Refresh in-memory DB snapshots so chat always sees latest numbers */
+async function ensureChatDataFresh() {
+  try {
+    if (db) {
+      if (!allStudents.length) await loadStudents();
+      if (!allEvents.length) await loadEvents();
+      else if (!allResults.length) await loadResults();
+      else refreshHousePoints();
+    }
+  } catch (e) {
+    console.warn('ensureChatDataFresh', e);
+  }
+}
+
+function liveDbSnapshot() {
+  const pts = Object.entries(housePts || {}).sort((a, b) => b[1] - a[1]);
+  const houseCounts = {};
+  (allStudents || []).forEach(s => {
+    const h = (s.house || 'Unknown').trim() || 'Unknown';
+    houseCounts[h] = (houseCounts[h] || 0) + 1;
+  });
+  const now = new Date();
+  const upcoming = (allEvents || []).filter(e => typeof isEventPassed === 'function' ? !isEventPassed(e, now) && e.open !== 'suspended' : true).length;
+  return {
+    leaderboard: pts.map(([h, p], i) => ({ rank: i + 1, house: h, points: p })),
+    students: allStudents?.length || 0,
+    events: allEvents?.length || 0,
+    results: allResults?.length || 0,
+    upcoming,
+    houseCounts
   };
 }
 
 function getBVMSystemPrompt() {
-  const pts = Object.entries(housePts||{}).map(([h,p])=>`${h}: ${p} pts`).join(' | ');
-  return `You are the BVM Assistant for Bal Vidya Mandir, Sambhal (Session ${currentSessionLabel}).
-You are an expert on this school's inter-house competition management system.
+  const snap = liveDbSnapshot();
+  const ptsLine = snap.leaderboard.map(x => `${x.house}: ${x.points} pts`).join(' | ') || 'No results yet';
+  const houseLine = Object.entries(snap.houseCounts).map(([h, c]) => `${h}: ${c}`).join(' | ') || 'none';
+  return `You are the BVM Assistant for Bal Vidya Mandir, Sambhal (Session ${currentSessionLabel || '2026-27'}).
+Answer ONLY using the LIVE DATABASE numbers below when the user asks about points, students, events, or results.
+Do not invent data. If a number is zero, say so.
 
-FOUR HOUSES: Ekta House (green), Sankalp House (blue), Prayas House (orange), Vishwas House (purple)
-POINTS SYSTEM: 1st = 5 pts, 2nd = 3 pts, 3rd = 1 pt, 4th = 0 pts
-CURRENT LEADERBOARD: ${pts||'No results yet'}
-STUDENTS IN DB: ${allStudents?.length||0}  |  EVENTS IN DB: ${allEvents?.length||0}
+FOUR HOUSES: Ekta (green), Sankalp (red), Prayas (blue), Vishwas (gold)
+POINTS: 1st=5, 2nd=3, 3rd=1, 4th=0
 
-SYSTEM FEATURES:
-- Dashboard: live leaderboard, upcoming events, stats
-- Events: filter by This Month, Next Month, This Week, Passed, Suspended
-- Add Participant: houses login with password, register students for events
-- Delete Participant: admin or house can remove registrations
-- Find Student: search by house, class+section, or event+house
-- Settings (Admin only): upload students via Excel, add/manage events, add results
-- Add Result: admin enters house positions for house events OR student-wise for open events
-- Scoreboard: bar chart + leaderboard
-- House Gallery: shows house photos
-- All Results: all saved results
-- List View = Table format; Icon View = Card format
+LIVE LEADERBOARD: ${ptsLine}
+STUDENTS IN DB: ${snap.students}
+EVENTS IN DB: ${snap.events}
+RESULTS IN DB: ${snap.results}
+UPCOMING EVENTS: ${snap.upcoming}
+STUDENTS PER HOUSE: ${houseLine}
 
-EXCEL COLUMNS — students: admission_no, student_name, class, section, house
-EXCEL COLUMNS — events: event_name, for_class, open, event_date, participants
+Be friendly, short, and reply in the same language as the user.`;
+}
 
-Reply in the same language as the user. Be friendly, short, and helpful.
-For live data questions use the numbers above.`;
+/**
+ * Answer common DB questions locally (no API). Returns string or null.
+ */
+function answerFromDatabase(question) {
+  const q = String(question || '').toLowerCase().trim();
+  if (!q) return null;
+  const snap = liveDbSnapshot();
+
+  // leaderboard / points / ranking
+  if (/(leaderboard|points|ranking|rank|who is leading|top house|scoreboard|kaun lead|kitne points|house points)/i.test(q)) {
+    if (!snap.leaderboard.length) return 'No house points yet. Add results in Settings → Add Result.';
+    const lines = snap.leaderboard.map(x => `${x.rank}. ${x.house} — ${x.points} points`);
+    return 'Current house leaderboard (from your database):\n' + lines.join('\n');
+  }
+
+  // student counts
+  if (/(how many student|total student|students in db|kitne student|student count)/i.test(q)) {
+    let extra = '';
+    if (Object.keys(snap.houseCounts).length) {
+      extra = '\nBy house: ' + Object.entries(snap.houseCounts).map(([h, c]) => `${h} ${c}`).join(', ');
+    }
+    return `There are ${snap.students} students loaded from your database.${extra}`;
+  }
+
+  // students in a specific house
+  const houseMatch = q.match(/\b(ekta|sankalp|prayas|vishwas)\b/i);
+  if (houseMatch && /(student|kitne|how many|count)/i.test(q)) {
+    const key = houseMatch[1].toLowerCase();
+    const count = (allStudents || []).filter(s => (s.house || '').toLowerCase().includes(key)).length;
+    const name = key.charAt(0).toUpperCase() + key.slice(1) + ' House';
+    return `${name} has ${count} students in the database.`;
+  }
+
+  // events
+  if (/(how many event|total event|events in db|kitne event)/i.test(q)) {
+    return `There are ${snap.events} events in the database (${snap.upcoming} upcoming).`;
+  }
+  if (/(upcoming event|next event|aane wale)/i.test(q)) {
+    const now = new Date();
+    let list = [...(allEvents || [])];
+    if (typeof isEventPassed === 'function') {
+      list = list.filter(e => !isEventPassed(e, now) && e.open !== 'suspended');
+    }
+    list = list.slice(0, 12);
+    if (!list.length) return 'No upcoming events found in the database.';
+    return 'Upcoming events (from database):\n' + list.map((e, i) => {
+      const label = typeof formatEventLabel === 'function' ? formatEventLabel(e) : (e.event_name || 'Event');
+      return `${i + 1}. ${label}${e.event_date ? ' — ' + e.event_date : ''}`;
+    }).join('\n');
+  }
+  if (/(list event|all event|show event|events list)/i.test(q)) {
+    const list = (allEvents || []).slice(0, 15);
+    if (!list.length) return 'No events found in the database yet.';
+    return 'Events (from database):\n' + list.map((e, i) => {
+      const label = typeof formatEventLabel === 'function' ? formatEventLabel(e) : (e.event_name || 'Event');
+      return `${i + 1}. ${label}${e.event_date ? ' — ' + e.event_date : ''}`;
+    }).join('\n');
+  }
+
+  // results
+  if (/(how many result|total result|results in db|kitne result)/i.test(q)) {
+    return `There are ${snap.results} saved results in the database.`;
+  }
+  if (/(show result|all result|latest result)/i.test(q)) {
+    const list = (allResults || []).slice(0, 10);
+    if (!list.length) return 'No results saved in the database yet.';
+    return 'Latest results (from database):\n' + list.map((r, i) => {
+      const name = r.event_name || r.event_label || ('Event ' + (r.event_id || ''));
+      return `${i + 1}. ${name} — 1st: ${r.first_place || '—'}, 2nd: ${r.second_place || '—'}, 3rd: ${r.third_place || '—'}`;
+    }).join('\n');
+  }
+
+  // search student by name / admission
+  const adm = q.match(/\b(\d{4,})\b/);
+  if (adm && /(student|admission|find|search)/i.test(q)) {
+    const hits = (allStudents || []).filter(s => String(s.admission_no || '').includes(adm[1])).slice(0, 8);
+    if (!hits.length) return `No student found with admission number containing ${adm[1]}.`;
+    return hits.map(s => `${s.student_name} | Adm: ${s.admission_no} | Class ${s.class}-${s.section || ''} | House: ${s.house || '—'}`).join('\n');
+  }
+  if (/(find student|search student|student named|naam)/i.test(q)) {
+    const words = q.replace(/find|search|student|named|naam|with|the|a|an|please|show/gi, ' ').trim().split(/\s+/).filter(w => w.length > 2);
+    if (words.length) {
+      let hits = allStudents || [];
+      words.forEach(w => {
+        hits = hits.filter(s => (s.student_name || '').toLowerCase().includes(w.toLowerCase()));
+      });
+      hits = hits.slice(0, 10);
+      if (hits.length) {
+        return 'Students found:\n' + hits.map(s => `${s.student_name} | Adm: ${s.admission_no} | ${s.class}-${s.section || ''} | ${s.house || '—'}`).join('\n');
+      }
+    }
+  }
+
+  // help
+  if (/^(help|what can you do|features|kaise use)/i.test(q)) {
+    return 'I can read your live database:\n• House leaderboard / points\n• Student counts & search\n• Events list / upcoming\n• Saved results\nAsk e.g. "Who is leading?" or "How many students in Ekta?"';
+  }
+
+  return null;
 }
 
 function toggleChat() {
   const box = document.getElementById('bvm-chat-box');
+  if (!box) return;
   const opening = !box.classList.contains('open');
   box.classList.toggle('open', opening);
-  if(opening && chatHistory.length === 0) {
-    addBotMsg('👋 Namaskar! I am your BVM Assistant. Ask me anything about houses, events, results, or how to use this system. You can also press 🎤 to speak!');
+  if (opening && chatHistory.length === 0) {
+    const snap = liveDbSnapshot();
+    addBotMsg(`Namaskar! I am your BVM Assistant.\nDatabase connected: ${snap.students} students, ${snap.events} events, ${snap.results} results.\nAsk about leaderboard, students, or events.`);
   }
-  if(opening) setTimeout(() => document.getElementById('chat-input')?.focus(), 150);
+  if (opening) setTimeout(() => document.getElementById('chat-input')?.focus(), 150);
 }
 
 let _mid = 0;
@@ -6010,165 +5984,168 @@ function addUserMsg(text) {
   const d = document.createElement('div');
   d.className = 'chat-bubble-user';
   d.innerHTML = `<span>${esc(text)}</span>`;
-  document.getElementById('chat-messages').appendChild(d);
+  document.getElementById('chat-messages')?.appendChild(d);
   scrollChat();
 }
 function addBotMsg(text) {
-  const id = 'bm'+(++_mid);
+  const id = 'bm' + (++_mid);
   const d = document.createElement('div');
   d.className = 'chat-bubble-bot';
   d.id = id;
-  d.innerHTML = `<span>${esc(text)}</span>`;
-  document.getElementById('chat-messages').appendChild(d);
+  d.innerHTML = `<span></span>`;
+  d.querySelector('span').textContent = text;
+  document.getElementById('chat-messages')?.appendChild(d);
   scrollChat();
   return id;
 }
 function updateBotMsg(id, text) {
   const el = document.getElementById(id);
-  if(el) el.querySelector('span').textContent = text;
+  if (el) {
+    const span = el.querySelector('span');
+    if (span) span.textContent = text;
+  }
   scrollChat();
 }
 function scrollChat() {
   const el = document.getElementById('chat-messages');
-  if(el) el.scrollTop = el.scrollHeight;
+  if (el) el.scrollTop = el.scrollHeight;
 }
 
 async function sendChat() {
   const input = document.getElementById('chat-input');
-  const text = (input.value || '').trim();
-  if(!text) return;
-  input.value = '';
+  const text = (input?.value || '').trim();
+  if (!text) return;
+  if (input) input.value = '';
   addUserMsg(text);
-  if(!Array.isArray(chatHistory)) chatHistory = [];
   chatHistory.push({ role: 'user', content: text });
-  const tid = addBotMsg('⏳ Thinking…');
+  const tid = addBotMsg('Reading database…');
+
   try {
-    if(typeof GROQ_READY === 'undefined' || !GROQ_READY) {
-      updateBotMsg(tid, 'Groq API key is not configured.');
+    await ensureChatDataFresh();
+
+    // 1) Local DB answers first — always accurate, no API needed
+    const local = answerFromDatabase(text);
+    if (local) {
+      chatHistory.push({ role: 'assistant', content: local });
+      updateBotMsg(tid, local);
+      if (voiceEnabled) speakText(local);
       return;
     }
-    const reply = await runAgent(chatHistory.slice(-12));
+
+    // 2) Groq AI with live DB context in system prompt
+    const reply = await runAgent(chatHistory.slice(-10));
     chatHistory.push({ role: 'assistant', content: reply });
     updateBotMsg(tid, reply);
-    if(voiceEnabled) speakText(reply);
-  } catch(e) {
-    updateBotMsg(tid, '❌ ' + (e.message || 'Could not connect to Groq.'));
+    if (voiceEnabled) speakText(reply);
+  } catch (e) {
     console.error('BVM Chat:', e);
+    const snap = liveDbSnapshot();
+    const fallback =
+      `I could not reach the AI service (${e.message || 'error'}).\n` +
+      `But your database is loaded:\n` +
+      `• Students: ${snap.students}\n• Events: ${snap.events}\n• Results: ${snap.results}\n` +
+      (snap.leaderboard.length
+        ? 'Leaderboard:\n' + snap.leaderboard.map(x => `${x.rank}. ${x.house} — ${x.points} pts`).join('\n')
+        : 'No points yet.') +
+      `\n\nTry asking: "Who is leading?" or "How many students?"`;
+    updateBotMsg(tid, fallback);
   }
 }
 
 async function runAgent(history) {
-  const now = new Date();
-  const board = Object.entries(housePts || {}).sort((a, b) => b[1] - a[1])
-    .map(([h, p], i) => `${i + 1}. ${h}: ${p} pts`).join('\n') || 'No results yet';
-  const upcoming = (allEvents || []).filter(e => !isEventPassed(e, now) && e.open !== 'suspended')
-    .slice(0, 8).map(e => `• ${formatEventLabel(e)} (${e.event_date || 'TBD'})`).join('\n') || 'None';
-  const system = `${getBVMSystemPrompt()}
-
-LIVE LEADERBOARD:
-${board}
-
-UPCOMING EVENTS:
-${upcoming}
-
-Answer helpfully using this live data. Keep replies concise.`;
-
+  // Always inject fresh DB facts into a system message
   const messages = [
-    { role: 'system', content: system },
-    ...(history || []).map(m => ({ role: m.role, content: String(m.content || '') }))
+    { role: 'system', content: getBVMSystemPrompt() },
+    ...history.map(m => ({ role: m.role, content: m.content }))
   ];
+
+  if (!GROQ_READY) {
+    const snap = liveDbSnapshot();
+    return (
+      'AI key not configured. Database status:\n' +
+      `Students: ${snap.students} | Events: ${snap.events} | Results: ${snap.results}\n` +
+      (snap.leaderboard.map(x => `${x.rank}. ${x.house}: ${x.points} pts`).join('\n') || 'No points yet.') +
+      '\n\nAsk a direct data question like "Who is leading?" or add a Groq API key.'
+    );
+  }
 
   const resp = await fetch(GROQ_API, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${GROQ_KEY}`
+      'Authorization': 'Bearer ' + GROQ_KEY
     },
     body: JSON.stringify({
       model: GROQ_MODEL,
       messages,
-      temperature: 0.4,
+      temperature: 0.2,
       max_tokens: 700
     })
   });
 
-  if(!resp.ok) {
+  if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    if(resp.status === 429) throw new Error('Rate limit reached. Please wait a moment and try again.');
-    if(resp.status === 401) throw new Error('Invalid Groq API key.');
-    throw new Error(err?.error?.message || `Groq API error ${resp.status}`);
+    throw new Error(err?.error?.message || ('Groq API error ' + resp.status));
   }
-
   const data = await resp.json();
-  const reply = data.choices?.[0]?.message?.content;
-  return (reply || 'Sorry, I could not generate a reply.').trim();
-}
-
-function pickIndianFemaleVoice(voices) {
-  try {
-    if(!voices || !voices.length) voices = window.speechSynthesis ? (window.speechSynthesis.getVoices() || []) : [];
-  } catch(e) { voices = []; }
-  if(!voices.length) return null;
-  const name = (v) => (v.name || '').toLowerCase();
-  const lang = (v) => (v.lang || '').toLowerCase();
-  const femaleNames = ['heera', 'neerja', 'kalpana', 'swara', 'aditi', 'veena', 'priya', 'ananya', 'isha', 'female', 'woman'];
-  const isFemaleName = (v) => femaleNames.some(n => name(v).includes(n));
-  const isMaleName = (v) => ['ravi', 'prabhat', 'madhur', 'male', 'man', 'david', 'mark'].some(n => name(v).includes(n));
-  return voices.find(v => (lang(v) === 'en-in' || lang(v).startsWith('en-in')) && isFemaleName(v) && !isMaleName(v))
-      || voices.find(v => (lang(v) === 'hi-in' || lang(v).startsWith('hi-in')) && isFemaleName(v) && !isMaleName(v))
-      || voices.find(v => (lang(v).includes('in') || name(v).includes('india')) && isFemaleName(v) && !isMaleName(v))
-      || voices.find(v => lang(v) === 'en-in' && !isMaleName(v))
-      || voices.find(v => lang(v) === 'hi-in' && !isMaleName(v))
-      || voices.find(v => lang(v).startsWith('en-in'))
-      || voices.find(v => lang(v).startsWith('hi-in'))
-      || voices.find(v => lang(v).startsWith('en'))
-      || voices[0]
-      || null;
+  const text = data?.choices?.[0]?.message?.content;
+  return text || 'No response from AI.';
 }
 
 function speakText(text) {
-  if(!window.speechSynthesis || !voiceEnabled) return;
+  if (!window.speechSynthesis || !voiceEnabled) return;
   window.speechSynthesis.cancel();
   const clean = String(text || '').replace(/[*_#`~]/g, '').replace(/https?:\/\/\S+/g, '').trim().substring(0, 450);
-  if(!clean) return;
+  if (!clean) return;
   const utt = new SpeechSynthesisUtterance(clean);
-  let list = [];
-  try { list = (ttsVoices && ttsVoices.length) ? ttsVoices : (window.speechSynthesis.getVoices() || []); } catch(e) { list = []; }
-  const voice = pickIndianFemaleVoice(list);
-  if(voice) utt.voice = voice;
-  utt.lang = voice?.lang || 'en-IN';
-  const isNamedFemale = voice && /heera|neerja|kalpana|swara|aditi|veena|priya|female/i.test(voice.name || '');
-  utt.rate = 0.92;
-  utt.pitch = isNamedFemale ? 1.0 : 1.12;
-  utt.volume = 1;
+  applyIndianFemaleVoice(utt);
   window.speechSynthesis.speak(utt);
 }
 
 function toggleVoiceOutput() {
   voiceEnabled = !voiceEnabled;
   const b = document.getElementById('voice-toggle-btn');
-  if(b) b.textContent = voiceEnabled ? '🔊' : '🔇';
-  if(!voiceEnabled) window.speechSynthesis?.cancel();
-  showToast(voiceEnabled ? 'Voice replies ON' : 'Voice replies OFF', 'info');
+  if (b) b.textContent = voiceEnabled ? '🔊' : '🔇';
+  if (!voiceEnabled) window.speechSynthesis?.cancel();
+  if (typeof showToast === 'function') showToast(voiceEnabled ? 'Voice replies ON' : 'Voice replies OFF', 'info');
 }
 
 function startVoiceInput() {
-  const SR = window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR) { showToast('Voice input needs Chrome or Edge browser.', 'warning'); return; }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    if (typeof showToast === 'function') showToast('Voice input needs Chrome or Edge browser.', 'warning');
+    return;
+  }
   const btn = document.getElementById('mic-btn');
-  if(recognition) { recognition.stop(); recognition=null; btn.classList.remove('listening'); btn.textContent='🎤'; return; }
+  if (recognition) {
+    recognition.stop();
+    recognition = null;
+    if (btn) { btn.classList.remove('listening'); btn.textContent = '🎤'; }
+    return;
+  }
   recognition = new SR();
-  recognition.lang='en-IN'; recognition.interimResults=false; recognition.maxAlternatives=1;
-  btn.classList.add('listening'); btn.textContent='🔴';
-  showToast('Listening… speak now', 'info');
+  recognition.lang = 'en-IN';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  if (btn) { btn.classList.add('listening'); btn.textContent = '🔴'; }
+  if (typeof showToast === 'function') showToast('Listening… speak now', 'info');
   recognition.onresult = e => {
     const t = e.results[0][0].transcript;
-    document.getElementById('chat-input').value = t;
-    btn.classList.remove('listening'); btn.textContent='🎤'; recognition=null;
+    const input = document.getElementById('chat-input');
+    if (input) input.value = t;
+    if (btn) { btn.classList.remove('listening'); btn.textContent = '🎤'; }
+    recognition = null;
     sendChat();
   };
-  recognition.onerror = e => { showToast('Voice: '+e.error, 'error'); btn.classList.remove('listening'); btn.textContent='🎤'; recognition=null; };
-  recognition.onend  = () => { btn.classList.remove('listening'); btn.textContent='🎤'; recognition=null; };
+  recognition.onerror = e => {
+    if (typeof showToast === 'function') showToast('Voice: ' + e.error, 'error');
+    if (btn) { btn.classList.remove('listening'); btn.textContent = '🎤'; }
+    recognition = null;
+  };
+  recognition.onend = () => {
+    if (btn) { btn.classList.remove('listening'); btn.textContent = '🎤'; }
+    recognition = null;
+  };
   recognition.start();
 }
 

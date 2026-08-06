@@ -5010,43 +5010,20 @@ function getIndianAnnouncementVoice() {
 }
 
 function speakResultAnnouncement(text) {
-  return new Promise(resolve => {
-    if(!window.speechSynthesis) {
-      resolve();
-      return;
-    }
+  return new Promise(async resolve => {
+    const cleanText = typeof normalizeAnnouncementText === 'function'
+      ? normalizeAnnouncementText(text)
+      : String(text || '').trim();
+    if (!cleanText) { resolve(); return; }
+    const token = ++resultSpeechToken;
     try {
-      const cleanText = normalizeAnnouncementText(text);
-      const token = ++resultSpeechToken;
-      let settled = false;
-      const finish = () => {
-        if(settled) return;
-        settled = true;
-        if(token === resultSpeechToken) setResultHostSpeaking(false);
-        resolve();
-      };
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(cleanText);
-      if (typeof applyIndianFemaleVoice === 'function') {
-        applyIndianFemaleVoice(utter);
-      } else {
-        const voice = getIndianAnnouncementVoice();
-        if(voice) utter.voice = voice;
-        utter.lang = voice?.lang || 'en-IN';
-        utter.rate = 0.86;
-        utter.pitch = 1.22;
-        utter.volume = 0.92;
-      }
-      utter.onstart = () => {
-        if(token === resultSpeechToken) setResultHostSpeaking(true);
-      };
-      utter.onend = finish;
-      utter.onerror = finish;
-      window.speechSynthesis.speak(utter);
-      const fallbackMs = Math.max(4000, cleanText.length * 140);
-      setTimeout(finish, fallbackMs);
-    } catch(e) {
-      setResultHostSpeaking(false);
+      if (token === resultSpeechToken) setResultHostSpeaking(true);
+      // Force speak for result show (same cloud voice on all devices)
+      await speakUnified(cleanText, { force: true, respectMute: false, maxLen: 600 });
+    } catch (e) {
+      console.warn('speakResultAnnouncement', e);
+    } finally {
+      if (token === resultSpeechToken) setResultHostSpeaking(false);
       resolve();
     }
   });
@@ -5764,6 +5741,147 @@ if (window.speechSynthesis) {
   try { ttsVoices = window.speechSynthesis.getVoices(); } catch (e) {}
 }
 
+
+// ════════════════════════════════════════════════════════════════
+// UNIFIED CLOUD VOICE (same soft Indian female on ALL devices)
+// Uses online TTS so every phone/laptop hears the same voice.
+// Falls back to device voice only if internet/TTS fails.
+// ════════════════════════════════════════════════════════════════
+let cloudAudioCurrent = null;
+let cloudSpeakGen = 0;
+const CLOUD_TTS_LANG = 'en-IN'; // Indian English — consistent female-style voice online
+
+function stopAllSpeech() {
+  cloudSpeakGen++;
+  try {
+    if (cloudAudioCurrent) {
+      cloudAudioCurrent.onended = null;
+      cloudAudioCurrent.onerror = null;
+      cloudAudioCurrent.pause();
+      cloudAudioCurrent.src = '';
+      cloudAudioCurrent = null;
+    }
+  } catch (e) {}
+  try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
+}
+
+function cleanSpeakText(text, maxLen) {
+  const clean = String(text || '')
+    .replace(/[*_#`~•]/g, ' ')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return maxLen ? clean.substring(0, maxLen) : clean;
+}
+
+/** Split long text into short chunks (online TTS has length limits). */
+function splitSpeakChunks(text, maxLen) {
+  maxLen = maxLen || 160;
+  const raw = cleanSpeakText(text);
+  if (!raw) return [];
+  if (raw.length <= maxLen) return [raw];
+  const parts = [];
+  // Prefer sentence boundaries
+  const sentences = raw.match(/[^.!?।]+[.!?।]+|[^.!?।]+$/g) || [raw];
+  let buf = '';
+  sentences.forEach(s => {
+    s = s.trim();
+    if (!s) return;
+    if ((buf + ' ' + s).trim().length <= maxLen) {
+      buf = (buf + ' ' + s).trim();
+    } else {
+      if (buf) parts.push(buf);
+      if (s.length <= maxLen) {
+        buf = s;
+      } else {
+        // hard-split long sentence
+        for (let i = 0; i < s.length; i += maxLen) parts.push(s.slice(i, i + maxLen));
+        buf = '';
+      }
+    }
+  });
+  if (buf) parts.push(buf);
+  return parts.filter(Boolean);
+}
+
+function playCloudChunk(chunk, lang, gen) {
+  return new Promise((resolve, reject) => {
+    if (gen !== cloudSpeakGen) { resolve(); return; }
+    const url = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl='
+      + encodeURIComponent(lang || CLOUD_TTS_LANG)
+      + '&q=' + encodeURIComponent(chunk);
+    const audio = new Audio();
+    cloudAudioCurrent = audio;
+    let done = false;
+    const finish = (err) => {
+      if (done) return;
+      done = true;
+      if (cloudAudioCurrent === audio) cloudAudioCurrent = null;
+      if (err) reject(err);
+      else resolve();
+    };
+    audio.onended = () => finish(null);
+    audio.onerror = () => finish(new Error('cloud audio error'));
+    // Timeout safety (slow networks)
+    const ms = Math.max(4000, chunk.length * 120);
+    const timer = setTimeout(() => finish(null), ms);
+    audio.onended = () => { clearTimeout(timer); finish(null); };
+    audio.onerror = () => { clearTimeout(timer); finish(new Error('cloud audio error')); };
+    audio.src = url;
+    const p = audio.play();
+    if (p && p.catch) p.catch(() => { clearTimeout(timer); finish(new Error('cloud play blocked')); });
+  });
+}
+
+/**
+ * Speak with the SAME online Indian voice on every device.
+ * Returns a Promise. Falls back to local soft female voice if cloud fails.
+ */
+async function speakUnified(text, options) {
+  options = options || {};
+  if (options.respectMute !== false && !voiceEnabled && !options.force) return;
+  const clean = cleanSpeakText(text, options.maxLen || 500);
+  if (!clean) return;
+
+  stopAllSpeech();
+  const gen = cloudSpeakGen;
+  const chunks = splitSpeakChunks(clean, 160);
+
+  // 1) Cloud TTS — same voice on all machines
+  try {
+    for (const chunk of chunks) {
+      if (gen !== cloudSpeakGen) return;
+      await playCloudChunk(chunk, options.lang || CLOUD_TTS_LANG, gen);
+      // tiny gap between chunks
+      await new Promise(r => setTimeout(r, 80));
+    }
+    return;
+  } catch (e) {
+    console.warn('Cloud TTS unavailable, using device voice:', e.message || e);
+  }
+
+  // 2) Local fallback (device-specific voice)
+  if (!window.speechSynthesis || gen !== cloudSpeakGen) return;
+  return new Promise(resolve => {
+    try {
+      window.speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance(clean);
+      if (typeof applyIndianFemaleVoice === 'function') applyIndianFemaleVoice(utt);
+      else {
+        utt.lang = 'en-IN';
+        utt.rate = 0.86;
+        utt.pitch = 1.22;
+      }
+      utt.onend = resolve;
+      utt.onerror = resolve;
+      window.speechSynthesis.speak(utt);
+      setTimeout(resolve, Math.max(3000, clean.length * 80));
+    } catch (e) {
+      resolve();
+    }
+  });
+}
+
 /** Soft Indian girl voice — shared by chatbot + result announcements */
 function pickIndianFemaleVoice() {
   const voices = (ttsVoices && ttsVoices.length)
@@ -6097,7 +6215,7 @@ function toggleChat() {
   box.classList.toggle('open', opening);
   if (opening && chatHistory.length === 0) {
     const snap = liveDbSnapshot();
-    addBotMsg(`Namaskar! I am your BVM Assistant.\nDatabase connected: ${snap.students} students, ${snap.events} events, ${snap.results} results.\nAsk about leaderboard, students, or events.`);
+    addBotMsg(`Namaskar! I am your BVM Assistant (v2026.08.06).\nDatabase: ${snap.students} students · ${snap.events} events · ${snap.results} results.\nAsk: leaderboard, students, or "is result of [event] declared?"`);
   }
   if (opening) setTimeout(() => document.getElementById('chat-input')?.focus(), 150);
 }
@@ -6226,21 +6344,16 @@ async function runAgent(history) {
 }
 
 function speakText(text) {
-  if (!window.speechSynthesis || !voiceEnabled) return;
-  window.speechSynthesis.cancel();
-  const clean = String(text || '').replace(/[*_#`~]/g, '').replace(/https?:\/\/\S+/g, '').trim().substring(0, 450);
-  if (!clean) return;
-  const utt = new SpeechSynthesisUtterance(clean);
-  applyIndianFemaleVoice(utt);
-  window.speechSynthesis.speak(utt);
+  if (!voiceEnabled) return;
+  speakUnified(text, { maxLen: 450, respectMute: true });
 }
 
 function toggleVoiceOutput() {
   voiceEnabled = !voiceEnabled;
   const b = document.getElementById('voice-toggle-btn');
   if (b) b.textContent = voiceEnabled ? '🔊' : '🔇';
-  if (!voiceEnabled) window.speechSynthesis?.cancel();
-  if (typeof showToast === 'function') showToast(voiceEnabled ? 'Voice replies ON' : 'Voice replies OFF', 'info');
+  if (!voiceEnabled) stopAllSpeech();
+  if (typeof showToast === 'function') showToast(voiceEnabled ? 'Voice replies ON (same on all devices)' : 'Voice replies OFF', 'info');
 }
 
 function startVoiceInput() {

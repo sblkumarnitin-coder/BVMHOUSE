@@ -5866,6 +5866,123 @@ STUDENTS PER HOUSE: ${houseLine}
 Be friendly, short, and reply in the same language as the user.`;
 }
 
+
+/** Parse dates like 1-08-26, 01/08/2026, 2026-08-01 into comparable YYYY-MM-DD keys */
+function parseFlexibleDateKey(str) {
+  const s = String(str || '').trim();
+  if (!s) return null;
+  // YYYY-MM-DD
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  // D-M-YY or D/M/YYYY or D-M-YYYY
+  m = s.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
+  if (m) {
+    let d = m[1].padStart(2,'0'), mo = m[2].padStart(2,'0'), y = m[3];
+    if (y.length === 2) y = (parseInt(y,10) >= 50 ? '19' : '20') + y;
+    return `${y}-${mo}-${d}`;
+  }
+  return null;
+}
+
+function extractDateKeysFromQuestion(q) {
+  const keys = [];
+  const re = /(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}|\d{4}-\d{1,2}-\d{1,2})/g;
+  let m;
+  while ((m = re.exec(q)) !== null) {
+    const k = parseFlexibleDateKey(m[1]);
+    if (k) keys.push(k);
+  }
+  return keys;
+}
+
+function eventMatchesQuestion(event, q, dateKeys) {
+  const label = (typeof formatEventLabel === 'function' ? formatEventLabel(event) : (event.event_name || '')).toLowerCase();
+  const name = String(event.event_name || '').toLowerCase();
+  const cls = String(event.for_class || '').toLowerCase();
+  const blob = `${label} ${name} ${cls}`;
+
+  // Require meaningful keywords from the question (drop filler words)
+  const stop = new Set(['the','of','is','are','a','an','on','for','to','or','not','result','results','declared','declare','announced','announce','dated','date','event','what','was','were','please','tell','me','about','has','have','been','status','check','show','winner','winners','position','positions']);
+  const words = q.toLowerCase().replace(/[^a-z0-9\s\-]/g, ' ').split(/\s+/).filter(w => w.length > 2 && !stop.has(w) && !/^\d/.test(w));
+  if (!words.length && !dateKeys.length) return false;
+
+  // Keyword match: at least one strong word must appear in event label
+  const keywordHit = !words.length || words.some(w => blob.includes(w));
+  if (!keywordHit) return false;
+
+  if (dateKeys.length) {
+    const ed = parseFlexibleDateKey(event.event_date) || String(event.event_date || '').slice(0, 10);
+    if (!ed) return false;
+    // Allow match if any extracted date matches event date
+    if (!dateKeys.some(k => k === ed)) return false;
+  }
+  return true;
+}
+
+function formatResultSummary(result, event) {
+  const label = result.event_name || result.event_label || (event ? formatEventLabel(event) : ('Event ' + (result.event_id || '')));
+  const date = (event && event.event_date) || result.event_date || '';
+  let body;
+  if (result.event_type === 'open') {
+    body = 'Open-event result is saved in the database.';
+  } else {
+    body = `1st: ${result.first_place || '—'} | 2nd: ${result.second_place || '—'} | 3rd: ${result.third_place || '—'}${result.fourth_place ? ' | 4th: ' + result.fourth_place : ''}`;
+  }
+  return `Yes — result is declared for "${label}"${date ? ' (' + date + ')' : ''}.\n${body}`;
+}
+
+/**
+ * Answer: "is result of badminton girls on 1-08-26 declared?"
+ * Uses allEvents + allResults / completedEventIds — no API needed.
+ */
+function answerEventResultQuestion(q) {
+  const dateKeys = extractDateKeysFromQuestion(q);
+  const events = allEvents || [];
+  if (!events.length) return null;
+
+  // Score matches
+  let matches = events.filter(e => eventMatchesQuestion(e, q, dateKeys));
+
+  // If date was given but no match, try name-only match as fallback list
+  if (!matches.length && dateKeys.length) {
+    matches = events.filter(e => eventMatchesQuestion(e, q, []));
+  }
+
+  // If question clearly names a sport/activity, prefer those matches
+  if (!matches.length) {
+    // Try looser: any event whose name shares a significant token
+    const tokens = q.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 3);
+    matches = events.filter(e => {
+      const blob = `${e.event_name || ''} ${e.for_class || ''}`.toLowerCase();
+      return tokens.some(t => blob.includes(t));
+    });
+  }
+
+  if (!matches.length) return null;
+
+  // Prefer exact date matches when available
+  if (dateKeys.length) {
+    const dated = matches.filter(e => dateKeys.includes(parseFlexibleDateKey(e.event_date) || String(e.event_date || '').slice(0, 10)));
+    if (dated.length) matches = dated;
+  }
+
+  // Limit answers
+  matches = matches.slice(0, 5);
+  const lines = matches.map(event => {
+    const id = parseInt(event.id, 10);
+    const declared = typeof hasResultForEvent === 'function' ? hasResultForEvent(id) : (completedEventIds && completedEventIds.has(id));
+    const result = (allResults || []).find(r => parseInt(r.event_id, 10) === id);
+    const label = typeof formatEventLabel === 'function' ? formatEventLabel(event) : (event.event_name || 'Event');
+    const date = event.event_date || 'TBD';
+    if (declared && result) return formatResultSummary(result, event);
+    if (declared) return `Yes — result is declared for "${label}" (${date}).`;
+    return `No — result is NOT declared yet for "${label}" (${date}).`;
+  });
+
+  if (lines.length === 1) return lines[0];
+  return 'Here is what I found in the database:\n' + lines.map((l, i) => `${i + 1}. ${l}`).join('\n');
+}
+
 /**
  * Answer common DB questions locally (no API). Returns string or null.
  */
@@ -5936,6 +6053,12 @@ function answerFromDatabase(question) {
       const name = r.event_name || r.event_label || ('Event ' + (r.event_id || ''));
       return `${i + 1}. ${name} — 1st: ${r.first_place || '—'}, 2nd: ${r.second_place || '—'}, 3rd: ${r.third_place || '—'}`;
     }).join('\n');
+  }
+
+  // Specific event: is result declared? / what is the result of X?
+  if (/(result|declared|declare|announced|announce|winner|position| rank)/i.test(q)) {
+    const eventAnswer = answerEventResultQuestion(q);
+    if (eventAnswer) return eventAnswer;
   }
 
   // search student by name / admission
@@ -6039,15 +6162,25 @@ async function sendChat() {
     if (voiceEnabled) speakText(reply);
   } catch (e) {
     console.error('BVM Chat:', e);
+    // Last chance: answer event/result questions from DB even when AI key fails
+    const localAgain = answerFromDatabase(text) || (typeof answerEventResultQuestion === 'function' ? answerEventResultQuestion(text) : null);
+    if (localAgain) {
+      chatHistory.push({ role: 'assistant', content: localAgain });
+      updateBotMsg(tid, localAgain);
+      if (voiceEnabled) speakText(localAgain);
+      return;
+    }
     const snap = liveDbSnapshot();
+    const keyHint = /invalid api key|unauthorized|401/i.test(String(e.message || ''))
+      ? '\n(Your Groq API key is invalid or expired — update GROQ_KEY in the code. Data questions still work without AI.)'
+      : '';
     const fallback =
-      `I could not reach the AI service (${e.message || 'error'}).\n` +
-      `But your database is loaded:\n` +
-      `• Students: ${snap.students}\n• Events: ${snap.events}\n• Results: ${snap.results}\n` +
+      `I could not reach the AI service (${e.message || 'error'}).${keyHint}\n` +
+      `Your database is loaded: ${snap.students} students, ${snap.events} events, ${snap.results} results.\n` +
       (snap.leaderboard.length
-        ? 'Leaderboard:\n' + snap.leaderboard.map(x => `${x.rank}. ${x.house} — ${x.points} pts`).join('\n')
+        ? 'Leaderboard: ' + snap.leaderboard.map(x => `${x.house} ${x.points}`).join(' | ')
         : 'No points yet.') +
-      `\n\nTry asking: "Who is leading?" or "How many students?"`;
+      `\n\nTry: "Who is leading?" · "How many students?" · "Is result of [event name] declared?"`;
     updateBotMsg(tid, fallback);
   }
 }
